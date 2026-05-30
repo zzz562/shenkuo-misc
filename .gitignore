@@ -1,0 +1,52 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+*.swp
+*.swo
+
+# IDE / Editor
+.idea/
+.vscode/
+*.code-workspace
+*.sublime-*
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# Build / Dist
+dist/
+build/
+*.egg-info/
+
+# Logs & Temp
+*.log
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Secrets (never commit these)
+.env
+.env.local
+*.pem
+secrets/
+credentials.json
+
+# OS generated
+Thumbs.db
+ehthumbs.db
