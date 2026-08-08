@@ -1,37 +1,122 @@
-# WhaleTrail — 统一 Paper Trading 平台
+# WhaleTrail — 黄金为主的日线 Paper Trading
 
-> 金刃 + 多市场回测，纯 Python 事件驱动，OpenClaw + Telegram 集成。
+> **定位：** 把黄金做明白；美股指数/个股仅作对冲与辅助对照。  
+> **不做：** A股、港股、高频/实时 tick。
+
+纯 Python 事件驱动回测 + Streamlit 看板 + OpenClaw/Telegram 日报。
+
+---
+
+## 范围
+
+| 优先级 | 资产 | 示例 | 数据源 |
+|--------|------|------|--------|
+| **主** | 黄金相关 | `GLD`（首选）、`GC=F`、`SLV` | yfinance + Parquet 缓存 |
+| **辅** | 美股指数/个股 | `SPY`、`QQQ`、`AAPL` | 同上 |
+| **不做** | A股 / 港股 | — | 已从工程主路径移除 |
+
+**为什么是 GLD 不是 GC=F？**  
+`GLD` 是黄金 ETF，日线连续、分红简单，适合 paper 与策略对比。  
+`GC=F` 期货有换月与空数据问题，仅作可选对照。
+
+---
 
 ## 快速开始
 
 ```bash
-cd ~/Projects/shenkuo-misc/projects/whaletrail
+cd ~/Projects/shenkuo-misc/projects/whaletrail   # Mac mini
+# 或
+cd ~/github_code/shenkuo-misc/projects/whaletrail  # MacBook
 
-# 装依赖
+# 依赖
 .venv/bin/pip install -r requirements.txt
 
-# 拉数据
-HTTPS_PROXY=http://127.0.0.1:7890 .venv/bin/python -m whaletrail.cli data fetch --symbol GLD --start 2020-01-01
+# 拉数据（需要代理时）
+export HTTPS_PROXY=http://127.0.0.1:7890
 
-# 跑回测
-HTTPS_PROXY=http://127.0.0.1:7890 .venv/bin/python -m whaletrail.cli backtest run \
-    --strategy gold_sma --symbols GLD --start 2018-01-01 --end 2019-02-25
+# 黄金主回测
+.venv/bin/python scripts/run-backtest.py gold_sma GLD 2018-01-01 2024-12-31 100000
 
-# 列出策略
-.venv/bin/python -m whaletrail.cli strategy list
+# 美股对冲对照
+.venv/bin/python scripts/run-backtest.py ma_cross SPY 2020-01-01 2024-12-31 100000
+
+# 日报（回测 + Ollama 中文摘要）
+./scripts/daily-report.sh gold_sma GLD
+
+# 看板
+.venv/bin/streamlit run scripts/dashboard.py --server.port 8766
+# → http://127.0.0.1:8766/
 ```
 
-## 策略
+---
 
-| 策略 | 文件 | 说明 |
-|------|------|------|
-| gold_sma | strategies/gold_sma.py | SMA 20/50 黄金趋势 |
-| ma_cross | strategies/ma_cross.py | 通用双均线（可配周期） |
+## 策略库
 
-## 市场支持
+| 策略 | 文件 | 默认用途 |
+|------|------|----------|
+| `gold_sma` | `strategies/gold_sma.py` | **黄金主策略** SMA 20/50 |
+| `ma_cross` | `strategies/ma_cross.py` | 通用双均线（对冲标的） |
+| `bollinger` | `strategies/bollinger.py` | 布林带突破 |
+| `turtle` | `strategies/turtle.py` | 海龟 / 唐奇安通道 |
+| `momentum` | `strategies/momentum.py` | 动量趋势 |
 
-| 市场 | 数据源 | 示例 |
-|------|--------|------|
-| 美股 | yfinance | AAPL, GLD, GC=F |
-| A股 | akshare | 600519.SH |
-| 港股 | akshare | 00700.HK |
+主线：先在 **GLD** 上把策略做明白，再用 **SPY/QQQ** 看对冲或相对强弱。
+
+---
+
+## 架构
+
+```
+Telegram / Cron
+      │
+      ▼
+scripts/run-backtest.py  →  JSON results/
+scripts/analyze.py       →  Ollama 一句话中文
+scripts/daily-report.sh  →  串联日报
+scripts/dashboard.py     →  Streamlit :8766
+
+whaletrail/
+├── data/          YFinanceSource + ParquetCache
+├── engine/        事件驱动回测（Account / Broker / Backtester）
+├── strategy/      可插拔策略
+├── storage/       SQLite（可选）
+└── metrics/       收益 / 回撤 / 夏普
+```
+
+---
+
+## 数据原则
+
+1. **主源：** yfinance（日线）
+2. **缓存：** `data_cache/` Parquet，减少外网抖动
+3. **代理：** 访问 Yahoo 时设 `HTTPS_PROXY`（如 Clash `7890`）
+4. **不做：** 分钟线、tick、A股/港股接口
+
+---
+
+## 与旧系统
+
+- LEAN / Docker / gold-paper：**已废弃**
+- 归档：`~/archive/Lean/`、`~/archive/OpenClaw-PaperTrading/`（Mac mini）
+
+---
+
+## 路线图（收窄后）
+
+- [x] 日线回测引擎 + 黄金策略
+- [x] 看板
+- [x] 策略库（SMA / 布林 / 海龟 / 动量）
+- [ ] 本地缓存默认开启、失败可重试
+- [ ] GLD vs SPY 基准对比
+- [ ] 日线 paper live（信号扫描，非高频）
+- [ ] 以后有券商账号再谈实盘
+
+---
+
+## 相关路径
+
+| 路径 | 说明 |
+|------|------|
+| 本仓库 | `projects/whaletrail/` in [shenkuo-misc](https://github.com/zzz562/shenkuo-misc) |
+| Mac mini 运行 | `~/Projects/shenkuo-misc/projects/whaletrail/` |
+| 运维手册 | ValarMorghulis `macmini-runbook/` |

@@ -1,4 +1,5 @@
-akshare>=1.14.0
+# WhaleTrail — gold + US daily paper trading
+# No akshare (A-share/HK out of scope)
 yfinance>=0.2.40
 pandas>=2.0.0
 numpy>=1.24.0

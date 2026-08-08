@@ -1,8 +1,7 @@
-"""WhaleTrail — Python paper trading system.
+"""WhaleTrail — gold-first daily paper trading & backtesting.
 
-Multi-market backtesting and simulation with local Parquet caching,
-yfinance (US/XAU) and akshare (CN/HK) data sources, SQLite persistence,
-and a Click-based CLI.
+Primary: gold (GLD). Auxiliary: US equities / index ETFs (SPY, QQQ, …).
+Out of scope: A-shares, Hong Kong stocks, high-frequency data.
 """
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"

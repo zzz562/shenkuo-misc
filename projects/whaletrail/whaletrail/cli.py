@@ -4,8 +4,8 @@ Usage
 -----
 .. code-block:: bash
 
-    python -m whaletrail.cli data fetch --symbol 600519.SH --start 2020-01-01 --end 2024-12-31
-    python -m whaletrail.cli backtest run --strategy ma_cross --symbols 600519.SH --start 2022-01-01 --end 2024-12-31 --cash 1000000
+    python -m whaletrail.cli data fetch --symbol GLD --start 2020-01-01 --end 2024-12-31
+    python -m whaletrail.cli backtest run --strategy gold_sma --symbols GLD --start 2018-01-01 --end 2024-12-31 --cash 100000
     python -m whaletrail.cli backtest report --run-id 1
     python -m whaletrail.cli strategy list
     python -m whaletrail.cli strategy info --name ma_cross
@@ -123,7 +123,7 @@ def data() -> None:
 
 
 @data.command("fetch")
-@click.option("--symbol", "-s", required=True, help="Symbol to fetch (e.g. 600519.SH, AAPL).")
+@click.option("--symbol", "-s", required=True, help="Symbol to fetch (e.g. GLD, SPY, AAPL).")
 @click.option("--start", required=True, help="Start date (YYYY-MM-DD).")
 @click.option("--end", required=True, help="End date (YYYY-MM-DD).")
 @click.option(
@@ -179,7 +179,7 @@ def backtest() -> None:
 )
 @click.option(
     "--symbols", required=True,
-    help="Comma-separated symbols (e.g. 600519.SH,000858.SZ).",
+    help="Comma-separated symbols (e.g. GLD,SPY).",
 )
 @click.option("--start", required=True, help="Start date (YYYY-MM-DD).")
 @click.option("--end", required=True, help="End date (YYYY-MM-DD).")

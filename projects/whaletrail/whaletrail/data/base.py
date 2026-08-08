@@ -36,7 +36,7 @@ class DataSource(ABC):
         ----------
         symbol : str
             Raw symbol string in market-native format (e.g. ``"AAPL"``,
-            ``"600519.SH"``).
+            ``"GLD"`` or ``"SPY"``).
         start : date
             Start of the date range (inclusive).
         end : date

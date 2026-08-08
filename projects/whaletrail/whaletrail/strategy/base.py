@@ -46,7 +46,7 @@ class Strategy(ABC):
         Parameters
         ----------
         symbol : str
-            The symbol that produced this bar (e.g. ``"600519.SH"``).
+            The symbol that produced this bar (e.g. ``"GLD"``, ``"SPY"``).
         bar : dict
             Dictionary with keys ``open``, ``high``, ``low``, ``close``,
             ``volume``, and optionally ``date``.

@@ -68,18 +68,18 @@ class Broker:
     """Simulated broker that matches orders against bar data.
 
     A‑share defaults:
-        commission_rate = 0.0003  (万三)
-        min_commission  = 5.0     (最低 5 元)
+        commission_rate = 0.0005  (~5 bps, US-style retail)
+        min_commission  = 0.0     (no A-share floor)
 
     Slippage is fixed at 0 (for now).
 
     Args:
-        commission_rate: Fraction of notional value (e.g. 0.0003 for 万三).
-        min_commission: Floor commission per fill.
+        commission_rate: Fraction of notional (default 5 bps for US/ETF paper).
+        min_commission: Floor commission per fill (0 for US-style paper).
     """
 
-    commission_rate: float = 0.0003
-    min_commission: float = 5.0
+    commission_rate: float = 0.0005
+    min_commission: float = 0.0
     slippage: float = field(default=0.0, init=False)
 
     _pending_orders: list[Order] = field(default_factory=list, init=False, repr=False)

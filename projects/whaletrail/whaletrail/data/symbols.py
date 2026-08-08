@@ -1,11 +1,11 @@
-"""Symbol helpers for multi-market instrument identification.
+"""Symbol helpers — gold-first, US equities as hedge.
 
-Markets
--------
-- CN  : A-shares (Shanghai / Shenzhen), e.g. "600519.SH", "000858.SZ"
-- HK  : Hong Kong stocks, e.g. "00700.HK"
-- US  : US equities, e.g. "AAPL", "TSLA"
-- XAU : Gold futures / spot, e.g. "GC=F"
+Supported
+---------
+- XAU : gold / precious metals ETFs & futures — GLD (primary), GC=F, SLV, …
+- US  : US equities & index ETFs — SPY, QQQ, AAPL, …
+
+Explicitly out of scope: A-shares, Hong Kong stocks.
 """
 
 from __future__ import annotations
@@ -16,99 +16,98 @@ from enum import Enum
 
 
 class Market(str, Enum):
-    """Supported trading markets."""
+    """Supported trading markets (narrow scope)."""
 
-    CN = "cn"    # A-shares (Shanghai / Shenzhen)
-    HK = "hk"    # Hong Kong stocks
-    US = "us"    # US equities
+    US = "us"    # US equities / index ETFs
     XAU = "xau"  # Gold / precious metals
+
+
+# Gold & metals universe (primary focus)
+_GOLD_PRIMARY = frozenset({"GLD"})  # preferred for paper trading
+_GOLD_RELATED = frozenset({
+    "GLD", "IAU", "SGOL", "GLDM",   # gold ETFs
+    "SLV", "SIVR",                   # silver
+    "GC=F", "SI=F", "HG=F",         # futures (optional)
+    "XAUUSD=X",
+})
+
+# Common hedge / benchmark ETFs
+_US_BENCHMARKS = frozenset({"SPY", "QQQ", "IWM", "DIA", "TLT", "UUP"})
 
 
 @dataclass(frozen=True)
 class Symbol:
-    """Normalised instrument identifier.
-
-    Attributes
-    ----------
-    raw : str
-        Original user-supplied string.
-    market : Market
-        Deduced trading market.
-    ticker : str
-        Clean ticker suitable for the data source (e.g. ``"600519"`` for CN,
-        ``"AAPL"`` for US).
-    """
+    """Normalised instrument identifier."""
 
     raw: str
     market: Market
     ticker: str
+    role: str = "equity"  # "gold_primary" | "gold_related" | "hedge" | "equity"
 
     def __str__(self) -> str:
         return self.raw
 
     def __repr__(self) -> str:
-        return f"Symbol(raw={self.raw!r}, market={self.market.value!r}, ticker={self.ticker!r})"
-
-
-# ---------------------------------------------------------------------------
-#  Parsing rules
-# ---------------------------------------------------------------------------
-
-# A-shares: 6 digits + .SH or .SZ
-_RE_CN = re.compile(r"^(\d{6})\.(SH|SZ)$", re.IGNORECASE)
-
-# Hong Kong: 1-5 digits + .HK
-_RE_HK = re.compile(r"^(\d{1,5})\.HK$", re.IGNORECASE)
-
-# Gold futures: GC=F (and variants)
-_GOLD_TICKERS = frozenset({"GC=F", "XAUUSD=X", "GLD"})
+        return (
+            f"Symbol(raw={self.raw!r}, market={self.market.value!r}, "
+            f"ticker={self.ticker!r}, role={self.role!r})"
+        )
 
 
 def parse_symbol(raw: str) -> Symbol:
-    """Parse a raw symbol string into a normalised :class:`Symbol`.
+    """Parse a raw symbol into a normalised :class:`Symbol`.
 
     Parameters
     ----------
-    raw : str
-        Input string such as ``"600519.SH"``, ``"00700.HK"``, ``"AAPL"``,
-        or ``"GC=F"``.
-
-    Returns
-    -------
-    Symbol
+    raw :
+        e.g. ``"GLD"``, ``"SPY"``, ``"AAPL"``, ``"GC=F"``.
 
     Raises
     ------
     ValueError
-        If *raw* cannot be matched to any known market convention.
+        If the symbol looks like A-share / HK, or cannot be parsed.
     """
-    raw_stripped = raw.strip()
+    s = raw.strip()
+    upper = s.upper()
 
-    # -- Gold ---------------------------------------------------------------
-    if raw_stripped.upper() in _GOLD_TICKERS:
-        return Symbol(raw=raw_stripped, market=Market.XAU, ticker="GC=F")
+    # Reject A-shares / HK explicitly (out of scope)
+    if re.fullmatch(r"\d{6}\.(SH|SZ)", upper):
+        raise ValueError(
+            f"A-share symbol {raw!r} is out of scope. "
+            f"WhaleTrail focuses on gold (GLD) + US equities (SPY/QQQ/…)."
+        )
+    if re.fullmatch(r"\d{1,5}\.HK", upper):
+        raise ValueError(
+            f"Hong Kong symbol {raw!r} is out of scope. "
+            f"Use gold (GLD) or US equities instead."
+        )
 
-    # -- A-shares -----------------------------------------------------------
-    m = _RE_CN.match(raw_stripped)
-    if m:
-        code = m.group(1)
-        return Symbol(raw=raw_stripped, market=Market.CN, ticker=code)
+    # Gold / metals
+    if upper in _GOLD_RELATED or upper.endswith("=F") and upper[:2] in ("GC", "SI", "HG"):
+        role = "gold_primary" if upper in _GOLD_PRIMARY else "gold_related"
+        # Keep ticker as user gave it (GLD stays GLD, GC=F stays GC=F)
+        return Symbol(raw=s, market=Market.XAU, ticker=upper, role=role)
 
-    # -- Hong Kong ----------------------------------------------------------
-    m = _RE_HK.match(raw_stripped)
-    if m:
-        code = m.group(1)
-        # Normalise to 5-digit HK code
-        ticker = code.zfill(5)
-        return Symbol(raw=raw_stripped, market=Market.HK, ticker=ticker)
+    # US equities / ETFs: 1–5 letters, optional .suffix for some tickers
+    if re.fullmatch(r"[A-Z]{1,5}", upper):
+        role = "hedge" if upper in _US_BENCHMARKS else "equity"
+        return Symbol(raw=s, market=Market.US, ticker=upper, role=role)
 
-    # -- US equities --------------------------------------------------------
-    #  Heuristic: 1-5 uppercase letters, no dots
-    if re.fullmatch(r"[A-Z]{1,5}", raw_stripped.upper()):
-        return Symbol(raw=raw_stripped, market=Market.US, ticker=raw_stripped.upper())
+    # BRK.B style
+    if re.fullmatch(r"[A-Z]{1,5}\.[A-Z]", upper):
+        return Symbol(raw=s, market=Market.US, ticker=upper, role="equity")
 
     raise ValueError(
-        f"Cannot parse symbol {raw_stripped!r}. "
-        f"Expected formats: A-shares '600519.SH', HK '00700.HK', "
-        f"US 'AAPL', or gold 'GC=F'."
+        f"Cannot parse symbol {raw!r}. "
+        f"Supported: gold 'GLD'/'GC=F', US 'SPY'/'QQQ'/'AAPL'. "
+        f"A-shares and HK are not supported."
     )
+
+
+def is_gold_focus(symbol: str) -> bool:
+    """True if symbol is in the gold/metals primary universe."""
+    try:
+        p = parse_symbol(symbol)
+        return p.market == Market.XAU
+    except ValueError:
+        return False

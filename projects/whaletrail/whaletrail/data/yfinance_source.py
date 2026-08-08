@@ -24,14 +24,14 @@ _YF_COLUMN_MAP: dict[str, str] = {
 
 
 class YFinanceSource(DataSource):
-    """Daily OHLCV data from Yahoo Finance.
+    """Daily OHLCV from Yahoo Finance.
 
-    Covers US equities and COMEX gold futures (``GC=F``).
+    Primary: gold ETFs (``GLD``). Auxiliary: US equities / index ETFs (``SPY``…).
+    Optional: futures like ``GC=F``. A-shares / HK are rejected by ``parse_symbol``.
     """
 
-    # Symbols for which yfinance’s auto_adjust behaviour may produce
-    # unexpected column names – we disable it for those.
-    _RAW_SYMBOLS = frozenset({"GC=F"})
+    # Futures: prefer raw OHLC (auto_adjust can be flaky)
+    _RAW_SYMBOLS = frozenset({"GC=F", "SI=F", "HG=F"})
 
     def get_daily(self, symbol: str, start: date, end: date) -> pd.DataFrame:
         """Fetch daily bars via ``yfinance.download()``.
@@ -39,14 +39,7 @@ class YFinanceSource(DataSource):
         Parameters
         ----------
         symbol : str
-            Raw symbol (e.g. ``"AAPL"``, ``"GC=F"``).
-        start : date
-        end : date
-
-        Returns
-        -------
-        pd.DataFrame
-            Standardised OHLCV DataFrame.
+            e.g. ``"GLD"``, ``"SPY"``, ``"AAPL"``, ``"GC=F"``.
         """
         parsed = parse_symbol(symbol)
         ticker = parsed.ticker

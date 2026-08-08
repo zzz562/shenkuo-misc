@@ -1,20 +1,16 @@
-"""WhaleTrail data layer — public API.
+"""Data layer — yfinance + Parquet cache (gold / US only)."""
 
-Exports symbols, abstract data source, concrete sources, and cache.
-"""
-
-from whaletrail.data.symbols import Market, Symbol, parse_symbol
 from whaletrail.data.base import DataSource
-from whaletrail.data.yfinance_source import YFinanceSource
-from whaletrail.data.akshare_source import AkShareSource
 from whaletrail.data.cache import ParquetCache
+from whaletrail.data.symbols import Market, Symbol, is_gold_focus, parse_symbol
+from whaletrail.data.yfinance_source import YFinanceSource
 
 __all__ = [
-    "Market",
-    "Symbol",
-    "parse_symbol",
     "DataSource",
-    "YFinanceSource",
-    "AkShareSource",
+    "Market",
     "ParquetCache",
+    "Symbol",
+    "YFinanceSource",
+    "is_gold_focus",
+    "parse_symbol",
 ]

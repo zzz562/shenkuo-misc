@@ -12,14 +12,15 @@ echo ""
 
 # Step 1: run backtest
 echo "⏳ 回测中..."
-BT_JSON=$("$PY" "$SCRIPTS/run-backtest.py" "${1:-gold_sma}" "${2:-GLD}" "${3:-2018-01-01}" "${4:-2019-02-25}" "${5:-100000}")
+# Defaults: gold_sma on GLD (primary universe)
+BT_JSON=$("$PY" "$SCRIPTS/run-backtest.py" "${1:-gold_sma}" "${2:-GLD}" "${3:-2018-01-01}" "${4:-2024-12-31}" "${5:-100000}")
 
 # Parse summary
 FINAL_EQ=$(echo "$BT_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['final_equity'])")
 RETURN_PCT=$(echo "$BT_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['total_return_pct'])")
 TRADE_N=$(echo "$BT_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['trades'])")
 
-echo "📊 ${2:-GLD}  ${3:-2018-01-01} -> ${4:-2019-02-25}"
+echo "📊 ${2:-GLD}  ${3:-2018-01-01} -> ${4:-2024-12-31}  (黄金主线)"
 echo "💰 权益: \$${FINAL_EQ}  |  收益: ${RETURN_PCT}%  |  交易: ${TRADE_N}次"
 echo ""
 
