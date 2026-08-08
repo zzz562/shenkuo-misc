@@ -40,6 +40,16 @@ build/
 tmp/
 temp/
 
+# LEAN backtest output (regenerated locally)
+projects/gold-paper/algorithm/backtests/
+projects/gold-paper/dashboard/output/
+projects/gold-paper/.venv/
+projects/gold-paper/logs/
+projects/gold-paper/paper_live/bars.csv
+projects/gold-paper/paper_live/state.json
+projects/gold-paper/paper_live/trader_state.json
+projects/gold-paper/paper_live/journal.jsonl
+
 # Secrets (never commit these)
 .env
 .env.local
@@ -50,3 +60,7 @@ credentials.json
 # OS generated
 Thumbs.db
 ehthumbs.db
+# WhaleTrail local artifacts
+projects/whaletrail/data_cache/
+projects/whaletrail/results/
+projects/whaletrail/.venv/
