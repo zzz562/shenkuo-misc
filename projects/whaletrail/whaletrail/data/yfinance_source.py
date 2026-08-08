@@ -1,5 +1,4 @@
-"""Yahoo Finance data source via yfinance."""
-
+"""Yahoo Finance + Parquet cache — gold / US daily data."""
 from __future__ import annotations
 
 import logging
@@ -9,103 +8,66 @@ import pandas as pd
 import yfinance as yf
 
 from whaletrail.data.base import DataSource
-from whaletrail.data.symbols import Market, parse_symbol
+from whaletrail.data.cache import ParquetCache
+from whaletrail.data.symbols import parse_symbol
 
 logger = logging.getLogger(__name__)
 
-# Map yfinance column names → standard OHLCV
-_YF_COLUMN_MAP: dict[str, str] = {
-    "Open": "open",
-    "High": "high",
-    "Low": "low",
-    "Close": "close",
-    "Volume": "volume",
-}
+_YF_COLUMN_MAP = {"Open": "open", "High": "high", "Low": "low",
+                  "Close": "close", "Volume": "volume"}
 
 
 class YFinanceSource(DataSource):
-    """Daily OHLCV from Yahoo Finance.
+    """Daily OHLCV, cached in Parquet. Cache-hit → instant. Cache-miss → fetch + save."""
 
-    Primary: gold ETFs (``GLD``). Auxiliary: US equities / index ETFs (``SPY``…).
-    Optional: futures like ``GC=F``. A-shares / HK are rejected by ``parse_symbol``.
-    """
-
-    # Futures: prefer raw OHLC (auto_adjust can be flaky)
     _RAW_SYMBOLS = frozenset({"GC=F", "SI=F", "HG=F"})
 
-    def get_daily(self, symbol: str, start: date, end: date) -> pd.DataFrame:
-        """Fetch daily bars via ``yfinance.download()``.
+    def __init__(self, cache_dir: str | None = None):
+        self._cache = ParquetCache(cache_dir)
 
-        Parameters
-        ----------
-        symbol : str
-            e.g. ``"GLD"``, ``"SPY"``, ``"AAPL"``, ``"GC=F"``.
-        """
+    def get_daily(self, symbol: str, start: date, end: date) -> pd.DataFrame:
         parsed = parse_symbol(symbol)
         ticker = parsed.ticker
 
-        # yfinance uses 'yyyy-mm-dd' strings
-        start_str = start.isoformat()
-        end_str = end.isoformat()
+        # 1) Hit cache
+        cached = self._cache.get(ticker, start, end)
+        if cached is not None and len(cached) > 0:
+            logger.debug("cache hit %s (%d rows)", ticker, len(cached))
+            return cached
 
+        # 2) Fetch
         auto_adjust = ticker not in self._RAW_SYMBOLS
-
-        logger.info(
-            "yfinance download: ticker=%s  %s → %s  auto_adjust=%s",
-            ticker,
-            start_str,
-            end_str,
-            auto_adjust,
-        )
+        logger.info("yfinance fetch %s %s→%s", ticker, start.isoformat(), end.isoformat())
 
         try:
-            df = yf.download(
-                ticker,
-                start=start_str,
-                end=end_str,
-                auto_adjust=auto_adjust,
-                progress=False,
-            )
+            df = yf.download(ticker, start=start.isoformat(), end=end.isoformat(),
+                             auto_adjust=auto_adjust, progress=False)
         except Exception:
-            logger.exception("yfinance download failed for %s", ticker)
+            logger.exception("yfinance failed %s", ticker)
             return _empty_df()
-
         if df is None or df.empty:
-            logger.debug("yfinance returned empty DataFrame for %s", ticker)
             return _empty_df()
 
-        # ── Normalise column names ─────────────────────────────────────
-        # yfinance may return a MultiIndex columns when downloading a
-        # single ticker; handle both cases gracefully.
+        # Normalise
         if isinstance(df.columns, pd.MultiIndex):
-            # Drop the ticker level – keep Price columns only
             df.columns = df.columns.get_level_values(0)
-
-        # Rename and keep only standard columns
         rename = {k: v for k, v in _YF_COLUMN_MAP.items() if k in df.columns}
         df = df.rename(columns=rename)
         df = df[[c for c in _YF_COLUMN_MAP.values() if c in df.columns]]
-
-        # ── Flatten index ──────────────────────────────────────────────
         if isinstance(df.index, pd.MultiIndex):
             df.index = df.index.get_level_values("Date")
         df.index = pd.to_datetime(df.index)
         df.index.name = "date"
-
-        # Ensure tz-naive
         if df.index.tz is not None:
             df.index = df.index.tz_localize(None)
-
         df = df.sort_index()
-
-        # ── Fill missing volume with 0 ─────────────────────────────────
         if "volume" in df.columns:
             df["volume"] = df["volume"].fillna(0).astype("int64")
 
-        logger.debug("yfinance returned %d rows for %s", len(df), ticker)
+        # 3) Cache
+        self._cache.put(ticker, df)
         return df
 
 
 def _empty_df() -> pd.DataFrame:
-    """Return an empty DataFrame with the standard OHLCV columns."""
     return pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
