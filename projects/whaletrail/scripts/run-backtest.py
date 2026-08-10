@@ -22,6 +22,7 @@ from whaletrail.data.yfinance_source import YFinanceSource
 from whaletrail.engine.backtester import Backtester
 from whaletrail.strategy.strategies.bollinger import BollingerStrategy
 from whaletrail.strategy.strategies.gold_sma import GoldSMAStrategy
+from whaletrail.strategy.strategies.gold_sma_v2 import GoldSMAStrategyV2
 from whaletrail.strategy.strategies.ma_cross import MACrossStrategy
 from whaletrail.strategy.strategies.momentum import MomentumStrategy
 from whaletrail.strategy.strategies.turtle import TurtleStrategy
@@ -32,6 +33,7 @@ os.environ.setdefault("HTTP_PROXY", os.environ.get("HTTP_PROXY", "http://127.0.0
 
 STRAT_MAP = {
     "gold_sma": GoldSMAStrategy,
+    "gold_sma_v2": GoldSMAStrategyV2,
     "ma_cross": MACrossStrategy,
     "bollinger": BollingerStrategy,
     "turtle": TurtleStrategy,
