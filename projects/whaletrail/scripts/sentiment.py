@@ -161,7 +161,7 @@ def scan(args) -> dict:
             s = score_tweet(tw["text"])
             s["account"] = f"@{username}"
             s["tweet_id"] = tid
-            s["tweet_text"] = tw["text"][:200]
+            s["tweet_text"] = tw["text"]  # full text
             s["created_at"] = tw.get("created_at", "")
             entries.append(s)
             scores[s["score"]] += 1

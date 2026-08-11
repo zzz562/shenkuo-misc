@@ -1,208 +1,192 @@
 #!/usr/bin/env python3
-"""WhaleTrail Dashboard — 回测 + 情绪监控 双页看板."""
-import json
-import sys
+"""WhaleTrail Dashboard — 回测 + 情绪监控."""
+import json, sys
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
 import pandas as pd
 import streamlit as st
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 
 st.set_page_config(page_title="WhaleTrail", layout="wide", page_icon="🐋")
 ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = ROOT / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-# ── Sidebar navigation ───────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════
+#  Shared helpers
+# ═══════════════════════════════════════════════════════════════════
+SCORE_COLORS = {"bullish": "#16a34a", "bearish": "#dc2626", "neutral": "#6b7280"}
+SCORE_EMOJI = {"bullish": "📈", "bearish": "📉", "neutral": "➖"}
+
+st.markdown("""
+<style>
+.big-metric { font-size: 2.4rem; font-weight: 700; }
+.sentiment-card { border-left: 4px solid #3b82f6; padding: 0.8rem 1rem; margin: 0.3rem 0; border-radius: 6px; background: #f8fafc; }
+.tweet-body { font-size: 0.95rem; line-height: 1.5; color: #1e293b; }
+.meta-row { color: #64748b; font-size: 0.8rem; }
+</style>
+""", unsafe_allow_html=True)
+
 st.sidebar.title("🐋 WhaleTrail")
-page = st.sidebar.radio("导航", ["📈 回测结果", "🐋 情绪监控", "🏠 运行状态"])
+st.sidebar.caption(f"Mac mini · {date.today()}")
+page = st.sidebar.radio("", ["📈 回测结果", "🐋 情绪监控", "🏠 运行状态"])
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  Page 1: Backtest
+#  Page: 回测结果
 # ═══════════════════════════════════════════════════════════════════
 def page_backtest() -> None:
     st.title("📈 回测结果")
     files = sorted(RESULTS_DIR.glob("backtest_*.json"), reverse=True)
     if not files:
-        st.warning("还没有回测结果，跑一次 backtest 吧")
+        st.warning("还没有回测结果")
         return
-
-    selected = st.sidebar.selectbox("选择结果", [f.name for f in files])
+    selected = st.sidebar.selectbox("选择", [f.name for f in files], label_visibility="collapsed")
     with open(RESULTS_DIR / selected) as f:
         data = json.load(f)
 
-    fe = data.get("final_equity", 0)
-    tr = data.get("total_return", 0) * 100
-    tc = data.get("total_commission", 0)
+    fe, tr, tc = data.get("final_equity", 0), data.get("total_return", 0) * 100, data.get("total_commission", 0)
     nt = len(data.get("trades", []))
-    strategy = data.get("strategy", "?")
-    symbol = data.get("symbol", "?")
-
-    cols = st.columns(5)
-    cols[0].metric("最终权益", f"${fe:,.0f}")
-    cols[1].metric("收益率", f"{tr:.2f}%")
-    cols[2].metric("交易次数", nt)
-    cols[3].metric("手续费", f"${tc:.2f}")
-    cols[4].metric("标的", symbol)
-    st.caption(f"策略: **{strategy}** | {data.get('start','?')} → {data.get('end','?')}")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("最终权益", f"${fe:,.0f}")
+    c2.metric("收益率", f"{tr:.2f}%", delta=f"{tr:.2f}%")
+    c3.metric("交易次数", nt)
+    c4.metric("手续费", f"${tc:.2f}")
+    c5.metric("标的", data.get("symbol", "?"))
+    st.caption(f"策略: **{data.get('strategy','?')}** · {data.get('start','?')} → {data.get('end','?')}")
 
     equity = data.get("equity_curve", [])
     if equity:
-        st.subheader("📈 权益曲线")
         df_eq = pd.DataFrame(equity)
-        df_eq["date"] = pd.to_datetime(df_eq["date"]).dt.date
+        df_eq["date"] = pd.to_datetime(df_eq["date"])
+        st.subheader("权益曲线")
         st.line_chart(df_eq.set_index("date")["equity"], use_container_width=True)
 
     trades = data.get("trades", [])
     if trades:
-        st.subheader("📋 交易记录")
-        df_tr = pd.DataFrame(trades)
-        st.dataframe(df_tr, use_container_width=True, hide_index=True)
+        st.subheader("交易记录")
+        st.dataframe(pd.DataFrame(trades), use_container_width=True, hide_index=True)
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  Page 2: Sentiment
+#  Page: 情绪监控
 # ═══════════════════════════════════════════════════════════════════
-def _load_latest_sentiment() -> Optional[dict]:
+def _load_latest() -> Optional[dict]:
     f = RESULTS_DIR / "sentiment_latest.json"
-    if f.exists():
-        return json.loads(f.read_text())
-    return None
+    return json.loads(f.read_text()) if f.exists() else None
 
-
-def _load_sentiment_history() -> list[dict]:
-    """Load all daily sentiment files, sorted by date."""
-    files = sorted(RESULTS_DIR.glob("sentiment_20*.json"))
-    history = []
-    for f in files:
-        if f.name == "sentiment_latest.json":
-            continue
-        try:
-            d = json.loads(f.read_text())
-            history.append(d)
-        except Exception:
-            pass
-    return history
-
+def _load_history() -> list[dict]:
+    return [json.loads(f.read_text()) for f in sorted(RESULTS_DIR.glob("sentiment_20*.json"))
+            if f.name != "sentiment_latest.json"]
 
 def page_sentiment() -> None:
-    st.title("🐋 情绪监控 · Gold Sentiment Index")
-    latest = _load_latest_sentiment()
-    history = _load_sentiment_history()
-
-    if latest is None:
-        st.warning("还没有情绪数据，等 cron 跑第一次（每天 09:00）")
+    st.title("🐋 Gold Sentiment Index")
+    latest = _load_latest()
+    if not latest:
+        st.info("等待首次情绪扫描（每天 09:00 cron）")
         return
 
-    # ── GSI gauge ──────────────────────────────────────────────
     gsi = latest.get("gold_sentiment_index", 0)
-    bullish = latest.get("bullish_count", 0)
-    bearish = latest.get("bearish_count", 0)
-    neutral = latest.get("neutral_count", 0)
+    bullish, bearish, neutral = latest.get("bullish_count", 0), latest.get("bearish_count", 0), latest.get("neutral_count", 0)
     total = latest.get("total_scored", 0)
-    date_str = latest.get("date", "?")
-
-    label = "🟢 看多" if gsi > 0.15 else ("🔴 看空" if gsi < -0.15 else "🟡 中性")
-    cols = st.columns(5)
-    cols[0].metric("GSI", f"{gsi:+.3f}", label)
-    cols[1].metric("看多", bullish)
-    cols[2].metric("看空", bearish)
-    cols[3].metric("中性", neutral)
-    cols[4].metric("总评分", f"{total} 条")
-    st.caption(f"数据日期: {date_str} | 来源: 18 位黄金 KOL")
-
-    # ── History chart ───────────────────────────────────────────
-    if history:
-        st.subheader("📊 GSI 历史")
-        df_h = pd.DataFrame(history)
-        df_h["date"] = pd.to_datetime(df_h["date"])
-        df_h = df_h.set_index("date").sort_index()
-        chart_data = df_h[["gold_sentiment_index"]].rename(
-            columns={"gold_sentiment_index": "GSI"}
-        )
-        st.line_chart(chart_data, use_container_width=True)
-
-    # ── Recent entries ──────────────────────────────────────────
     entries = latest.get("entries", [])
-    if entries:
-        st.subheader("📋 最近评分")
-        rows = []
-        for e in entries:
-            rows.append({
-                "账号": e.get("account", "?"),
-                "评分": e.get("score", "?"),
-                "置信度": e.get("confidence", "?"),
-                "关键词": e.get("keyword", "?"),
-                "推文": (e.get("tweet_text", "") or "")[:80] + "…",
-                "时间": (e.get("created_at", "") or "")[:10],
-            })
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-    # ── GSI distribution bars ───────────────────────────────────
-    if total > 0:
-        st.subheader("📊 情绪分布")
-        dist_df = pd.DataFrame({
-            "方向": ["看多 🟢", "看空 🔴", "中性 🟡"],
-            "数量": [bullish, bearish, neutral],
-        })
-        st.bar_chart(dist_df.set_index("方向"), use_container_width=True)
+    # ── Hero row ────────────────────────────────────────────────
+    tag = "🟢 看多" if gsi > 0.15 else ("🔴 看空" if gsi < -0.15 else "🟡 中性")
+    c1, c2, c3, c4, c5 = st.columns([2, 1, 1, 1, 2])
+    c1.metric("GSI 情绪指数", f"{gsi:+.3f}", tag)
+    c2.metric("📈 看多", bullish)
+    c3.metric("📉 看空", bearish)
+    c4.metric("➖ 中性", neutral)
+    c5.metric("📊 扫描", f"{total} 条推文")
+    st.caption(f"数据日期: **{latest.get('date', '?')}** · 来源: 18 位黄金 KOL · 每日 09:00 更新")
+
+    # ── History chart ────────────────────────────────────────────
+    history = _load_history()
+    if history:
+        st.subheader("📊 GSI 历史趋势")
+        df_h = pd.DataFrame(history).sort_values("date")
+        df_h["date"] = pd.to_datetime(df_h["date"])
+        st.area_chart(df_h.set_index("date")[["gold_sentiment_index"]].rename(
+            columns={"gold_sentiment_index": "GSI"}), use_container_width=True)
+
+    # ── Distribution + tweet feed ────────────────────────────────
+    if entries:
+        col_left, col_right = st.columns([1, 2])
+        with col_left:
+            st.subheader("情绪分布")
+            df_dist = pd.DataFrame({"方向": ["📈 看多", "📉 看空", "➖ 中性"], "数量": [bullish, bearish, neutral]})
+            st.bar_chart(df_dist.set_index("方向"), use_container_width=True)
+
+            # Per-KOL summary
+            kol_stats = {}
+            for e in entries:
+                acc = e.get("account", "?")
+                if acc not in kol_stats:
+                    kol_stats[acc] = {"bullish": 0, "bearish": 0, "neutral": 0}
+                kol_stats[acc][e.get("score", "neutral")] += 1
+            st.caption(f"覆盖 KOL: {len(kol_stats)} 位")
+
+        with col_right:
+            st.subheader("📋 推文评分明细")
+            for e in entries:
+                score = e.get("score", "neutral")
+                color = SCORE_COLORS.get(score, "#6b7280")
+                emoji = SCORE_EMOJI.get(score, "")
+                conf = "⭐" * e.get("confidence", 1) + "☆" * (5 - e.get("confidence", 1))
+
+                st.markdown(f"""
+                <div class="sentiment-card" style="border-left-color:{color}">
+                  <div class="meta-row">{emoji} <strong>{e.get("account","?")}</strong> · 置信 {conf}
+                  &nbsp;|&nbsp; {e.get("keyword","")} &nbsp;|&nbsp; {(e.get("created_at","") or "")[:10]}</div>
+                  <div class="tweet-body">{e.get("tweet_text","")}</div>
+                </div>
+                """, unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  Page 3: Status
+#  Page: 运行状态
 # ═══════════════════════════════════════════════════════════════════
 def page_status() -> None:
     st.title("🏠 运行状态")
-    import subprocess
 
-    services = {
-        "OpenClaw Gateway": 18789,
-        "Streamlit Dashboard": 8766,
-        "Ollama": 11434,
-    }
+    # Services health
+    checks = {"OpenClaw Gateway": ("http://127.0.0.1:18789/health", 18789),
+              "Dashboard": ("http://127.0.0.1:8766", 8766),
+              "Ollama": ("http://127.0.0.1:11434/api/tags", 11434)}
     rows = []
-    for name, port in services.items():
+    import urllib.request
+    for name, (url, port) in checks.items():
         try:
-            import urllib.request
-            url = f"http://127.0.0.1:{port}/health" if port == 18789 else f"http://127.0.0.1:{port}"
-            with urllib.request.urlopen(url, timeout=3) as resp:
-                rows.append({"服务": name, "端口": port, "状态": "✅" if resp.status < 400 else "⚠️"})
+            with urllib.request.urlopen(url, timeout=3) as r:
+                rows.append({"服务": name, "端口": port, "状态": "✅" if r.status < 400 else "⚠️"})
         except Exception:
             rows.append({"服务": name, "端口": port, "状态": "❌"})
 
-    # Launchd services
+    # Launchd
+    import subprocess
     try:
         out = subprocess.check_output(["launchctl", "list"], text=True, timeout=5)
-        for label in ["whaletrail", "ollama", "openclaw"]:
-            if label in out:
-                pid_line = [l for l in out.split("\n") if label in l]
-                if pid_line:
-                    rows.append({"服务": f"launchd: {label}", "端口": "-", "状态": "✅"})
+        for label, display in [("whaletrail", "Paper Live"), ("ollama", "Ollama"), ("openclaw", "OpenClaw")]:
+            rows.append({"服务": f"launchd: {display}", "端口": "-",
+                         "状态": "✅" if label in out else "❌"})
     except Exception:
         pass
 
     st.table(pd.DataFrame(rows))
 
-    # Recent results files
-    st.subheader("📁 数据文件")
-    results = sorted(RESULTS_DIR.glob("*"), reverse=True)[:20]
-    file_rows = [{"文件": r.name, "大小": f"{r.stat().st_size:,} B",
-                  "时间": datetime.fromtimestamp(r.stat().st_mtime).strftime("%m-%d %H:%M")}
-                 for r in results if r.is_file()]
+    # File listing
+    st.subheader("📁 results/ 文件")
+    files = sorted(RESULTS_DIR.glob("*"), reverse=True)[:30]
+    file_rows = []
+    for r in files:
+        if r.is_file():
+            file_rows.append({"文件": r.name, "大小": f"{r.stat().st_size:,} B",
+                              "修改时间": datetime.fromtimestamp(r.stat().st_mtime).strftime("%m-%d %H:%M")})
     st.dataframe(pd.DataFrame(file_rows), use_container_width=True, hide_index=True)
-
-    st.divider()
-    st.caption(f"WhaleTrail Dashboard | {date.today()}")
+    st.caption(f"WhaleTrail · {date.today()}")
 
 
 # ── Route ────────────────────────────────────────────────────────
-if page == "📈 回测结果":
-    page_backtest()
-elif page == "🐋 情绪监控":
-    page_sentiment()
-else:
-    page_status()
+{"📈 回测结果": page_backtest, "🐋 情绪监控": page_sentiment, "🏠 运行状态": page_status}[page]()
