@@ -20,26 +20,11 @@ sys.path.insert(0, str(ROOT))
 from whaletrail.data.symbols import parse_symbol
 from whaletrail.data.yfinance_source import YFinanceSource
 from whaletrail.engine.backtester import Backtester
-from whaletrail.strategy.strategies.bollinger import BollingerStrategy
-from whaletrail.strategy.strategies.gold_sma import GoldSMAStrategy
-from whaletrail.strategy.strategies.gold_sma_v2 import GoldSMAStrategyV2
-from whaletrail.strategy.strategies.ma_cross import MACrossStrategy
-from whaletrail.strategy.strategies.momentum import MomentumStrategy
-from whaletrail.strategy.strategies.turtle import TurtleStrategy
+from whaletrail.strategy.registry import get_strategy_class
 
 # Default HTTPS proxy for Yahoo if not set (Mac mini Clash)
 os.environ.setdefault("HTTPS_PROXY", os.environ.get("HTTPS_PROXY", "http://127.0.0.1:7890"))
 os.environ.setdefault("HTTP_PROXY", os.environ.get("HTTP_PROXY", "http://127.0.0.1:7890"))
-
-STRAT_MAP = {
-    "gold_sma": GoldSMAStrategy,
-    "gold_sma_v2": GoldSMAStrategyV2,
-    "ma_cross": MACrossStrategy,
-    "bollinger": BollingerStrategy,
-    "turtle": TurtleStrategy,
-    "momentum": MomentumStrategy,
-}
-
 
 def main() -> None:
     strategy_name = sys.argv[1] if len(sys.argv) > 1 else "gold_sma"
@@ -52,11 +37,13 @@ def main() -> None:
     parsed = parse_symbol(symbol)
     ticker = parsed.ticker
 
-    StrategyClass = STRAT_MAP.get(strategy_name)
-    if StrategyClass is None:
+    try:
+        StrategyClass = get_strategy_class(strategy_name)
+    except KeyError:
+        from whaletrail.strategy.registry import list_strategies
         print(
             json.dumps(
-                {"error": f"unknown strategy {strategy_name}", "known": list(STRAT_MAP)},
+                {"error": f"unknown strategy {strategy_name}", "known": list_strategies()},
                 ensure_ascii=False,
             )
         )
