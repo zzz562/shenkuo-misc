@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from typing import Optional
 """Momentum rotation strategy — go long when momentum is positive."""
 from whaletrail.strategy.base import Strategy
 
@@ -32,3 +35,23 @@ class MomentumStrategy(Strategy):
             self.order_target_percent(symbol, self.target_percent)
         elif momentum <= self.threshold and holding:
             self.order_target_percent(symbol, 0.0)
+
+
+def get_live_signal(
+    closes: list[float],
+    highs: list[float],
+    lows: list[float],
+    state: dict,
+    symbol: str,
+) -> Optional[str]:
+    """Paper-live signal: momentum crossover."""
+    period = 20
+    if len(closes) < period + 1:
+        return None
+    mom = (closes[-1] - closes[-period]) / closes[-period]
+    mom_prev = (closes[-2] - closes[-period - 1]) / closes[-period - 1]
+    if mom_prev <= 0 and mom > 0:
+        return "BUY"
+    if mom_prev >= 0 and mom < 0:
+        return "SELL"
+    return None

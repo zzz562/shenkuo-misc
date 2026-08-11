@@ -2,8 +2,7 @@
 
 Usage::
 
-    from whaletrail.strategy.registry import get_strategy_class, list_strategies,
-        STRATEGY_SIGNAL_FNS
+    from whaletrail.strategy.registry import get_strategy_class, list_strategies
 
     cls = get_strategy_class("gold_sma")
     strategy = cls()
@@ -16,7 +15,7 @@ from typing import Callable, Optional, Type
 from whaletrail.strategy.base import Strategy
 
 # ---------------------------------------------------------------------------
-# Strategy class registry (used by run-backtest.py, cli.py, paper-live.py)
+# Strategy class registry (used by run-backtest.py, cli.py)
 # ---------------------------------------------------------------------------
 
 from whaletrail.strategy.strategies.bollinger import BollingerStrategy
@@ -55,9 +54,27 @@ def list_strategies() -> list[str]:
 # ---------------------------------------------------------------------------
 # Each signal function receives (closes, highs, lows, state, symbol) and returns
 # an Optional[str]: "BUY", "SELL", or None (no signal).
+# Imported lazily from strategy files to avoid circular engine dependency.
 
 SignalFn = Callable[
     [list[float], list[float], list[float], dict, str], Optional[str]
 ]
 
-STRATEGY_SIGNAL_FNS: dict[str, SignalFn] = {}
+
+def _build_signal_registry() -> dict[str, SignalFn]:
+    """Lazy-load signal functions — only called by paper-live at runtime."""
+    from whaletrail.strategy.strategies.bollinger import get_live_signal as b_sig
+    from whaletrail.strategy.strategies.gold_sma import get_live_signal as g_sig
+    from whaletrail.strategy.strategies.gold_sma_v2 import get_live_signal as gv_sig
+    from whaletrail.strategy.strategies.ma_cross import get_live_signal as m_sig
+    from whaletrail.strategy.strategies.momentum import get_live_signal as mo_sig
+    from whaletrail.strategy.strategies.turtle import get_live_signal as t_sig
+
+    return {
+        "gold_sma": g_sig,
+        "gold_sma_v2": gv_sig,
+        "ma_cross": m_sig,
+        "bollinger": b_sig,
+        "momentum": mo_sig,
+        "turtle": t_sig,
+    }

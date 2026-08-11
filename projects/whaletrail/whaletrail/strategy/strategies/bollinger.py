@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from typing import Optional
 """Bollinger Bands breakout strategy."""
 from whaletrail.strategy.base import Strategy
 
@@ -37,3 +40,31 @@ class BollingerStrategy(Strategy):
             self.order_target_percent(symbol, self.target_percent)
         elif close < lower and holding:
             self.order_target_percent(symbol, 0.0)
+
+
+def get_live_signal(
+    closes: list[float],
+    highs: list[float],
+    lows: list[float],
+    state: dict,
+    symbol: str,
+) -> Optional[str]:
+    """Paper-live signal: Bollinger Bands breakout."""
+    period, k = 20, 2.0
+    if len(closes) < period + 1:
+        return None
+    window = closes[-period:]
+    mean = sum(window) / period
+    var = sum((x - mean) ** 2 for x in window) / period
+    std = var ** 0.5
+    upper, lower = mean + k * std, mean - k * std
+    c, prev = closes[-1], closes[-2]
+    pos = state.get("positions", {}).get(f"{symbol}_bb")
+    holding = pos is not None
+    if prev <= upper and c > upper and not holding:
+        return "BUY"
+    if prev >= lower and c < lower and holding:
+        return "SELL"
+    if holding and prev >= mean and c < mean:
+        return "SELL"
+    return None

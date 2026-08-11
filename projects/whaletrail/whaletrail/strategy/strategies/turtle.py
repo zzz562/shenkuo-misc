@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from typing import Optional
 """Turtle Trading strategy — Donchian channel breakout."""
 from whaletrail.strategy.base import Strategy
 
@@ -45,3 +48,26 @@ class TurtleStrategy(Strategy):
             self.order_target_percent(symbol, self.target_percent)
         elif c < exit_low and holding:
             self.order_target_percent(symbol, 0.0)
+
+
+def get_live_signal(
+    closes: list[float],
+    highs: list[float],
+    lows: list[float],
+    state: dict,
+    symbol: str,
+) -> Optional[str]:
+    """Paper-live signal: Turtle breakout."""
+    entry_n, exit_n = 20, 10
+    if len(highs) < entry_n + 1 or len(lows) < exit_n + 1:
+        return None
+    c = closes[-1]
+    entry_high = max(highs[-entry_n - 1 : -1])
+    exit_low = min(lows[-exit_n - 1 : -1])
+    pos = state.get("positions", {}).get(f"{symbol}_turtle")
+    holding = pos is not None
+    if c > entry_high and not holding:
+        return "BUY"
+    if c < exit_low and holding:
+        return "SELL"
+    return None

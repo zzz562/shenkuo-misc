@@ -14,7 +14,8 @@ from typing import Any, Protocol
 import pandas as pd
 
 from .account import Account
-from .broker import Broker, Order
+from .broker import Broker
+from .types import Order
 from .clock import TradingClock
 from ..strategy.base import Strategy
 

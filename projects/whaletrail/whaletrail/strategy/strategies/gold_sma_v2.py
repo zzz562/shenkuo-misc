@@ -1,5 +1,6 @@
 """Enhanced Gold SMA strategy — ATR stop-loss + risk-managed position sizing."""
 from __future__ import annotations
+from typing import Optional
 
 from whaletrail.strategy.base import Strategy
 
@@ -123,3 +124,41 @@ class GoldSMAStrategyV2(Strategy):
                 new_stop = c - self.atr_stop_mult * atr
                 if new_stop > self._stop_level[symbol]:
                     self._stop_level[symbol] = new_stop
+
+
+def get_live_signal(
+    closes: list[float],
+    highs: list[float],
+    lows: list[float],
+    state: dict,
+    symbol: str,
+) -> Optional[str]:
+    """Paper-live signal: SMA20/50 + SMA200 trend filter + ATR trailing stop."""
+    from whaletrail.indicators import atr, cross_signal, sma
+    if len(closes) < 51:
+        return None
+    c = closes[-1]
+    a = atr(highs, lows, closes, 14) or 0
+    stops = state.setdefault("atr_stops", {})
+    pos = state.get("positions", {}).get(symbol)
+    holding = pos is not None and pos.get("side") == "LONG"
+    stop = stops.get(symbol)
+    if holding and stop is not None and c < stop:
+        stops.pop(symbol, None)
+        return "SELL"
+    base = cross_signal(closes, 20, 50)
+    sma200 = sma(closes, min(200, len(closes))) if len(closes) >= 50 else None
+    if base == "BUY":
+        if sma200 is not None and c < sma200:
+            return None
+        if a > 0:
+            stops[symbol] = c - 2.0 * a
+        return "BUY"
+    if base == "SELL":
+        stops.pop(symbol, None)
+        return "SELL"
+    if holding and a > 0 and stop is not None:
+        new_stop = c - 2.0 * a
+        if new_stop > stop:
+            stops[symbol] = new_stop
+    return None

@@ -90,3 +90,15 @@ class GoldSMAStrategy(Strategy):
         if len(window) < period:
             return sum(window) / len(window)
         return sum(window[-period:]) / period
+
+
+def get_live_signal(
+    closes: list[float],
+    highs: list[float],
+    lows: list[float],
+    state: dict,
+    symbol: str,
+) -> Optional[str]:
+    """Paper-live signal: SMA 20/50 crossover."""
+    from whaletrail.indicators import cross_signal
+    return cross_signal(closes, 20, 50)

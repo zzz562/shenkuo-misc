@@ -93,3 +93,15 @@ class MACrossStrategy(Strategy):
             f"MACrossStrategy(fast={self.fast}, slow={self.slow}, "
             f"target={self.target_percent:.0%})"
         )
+
+
+def get_live_signal(
+    closes: list[float],
+    highs: list[float],
+    lows: list[float],
+    state: dict,
+    symbol: str,
+) -> Optional[str]:
+    """Paper-live signal: SMA 10/30 crossover."""
+    from whaletrail.indicators import cross_signal
+    return cross_signal(closes, 10, 30)

@@ -48,18 +48,6 @@ def _import_engine():
         )
 
 
-def _import_backtester():
-    engine = _import_engine()
-    try:
-        return engine.Backtester
-    except AttributeError:
-        raise click.ClickException(
-            "Backtester class not found in whaletrail.engine.  "
-            "Make sure engine/backtester.py defines a Backtester class."
-        )
-
-
-from whaletrail.strategy.registry import get_strategy_class, list_strategies  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
