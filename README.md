@@ -22,6 +22,7 @@
 | **情绪扫描** | X/Twitter KOL 情绪 → 打分 → 信号融合 |
 | **日报 / 看板** | OpenClaw + Telegram 推送；Streamlit 本地看板 `:8766` |
 | **严格不做** | A 股、港股、分钟级/tick 高频、akshare/Tushare、LEAN/Docker |
+| **Watchlist 快照** | TradingView scanner → YAML 关注列表 → SQLite → Markdown 报表 |
 
 ## 目录结构
 
@@ -31,8 +32,9 @@
 │   └── whaletrail/            ← 唯一 active 项目
 │       ├── whaletrail/        # 核心引擎（策略、回测、存储、风控）
 │       ├── scripts/           # run-backtest / daily-report / paper-live / dashboard / sentiment
-│       ├── config/            # watchlist 等
-│       ├── docs/              # 设计文档与 runbook
+│       ├── config/            # watchlist.yaml
+│       ├── reporting/        # Markdown 报表
+│       ├── docs/              # SCOPE / SENTIMENT / WHALE_WATCH / tvscreener
 │       ├── data_cache/        # yfinance Parquet 缓存（不入 git）
 │       └── results/           # 回测 / 情绪输出（不入 git）
 ├── configs/                   # 环境配置

@@ -11,7 +11,7 @@
 
 | 优先级 | 资产 | 示例 | 数据源 |
 |--------|------|------|--------|
-| **主** | 黄金相关 | `GLD`（首选）、`GC=F`、`SLV` | yfinance + Parquet 缓存 |
+| **主** | 黄金相关 | `GLD`（首选）、`GC=F`、`SLV` | yfinance + Parquet 缓存 + TradingView scanner |
 | **辅** | 美股指数/个股 | `SPY`、`QQQ`、`AAPL` | 同上 |
 | **不做** | A股 / 港股 | — | 已从工程主路径移除 |
 
@@ -46,11 +46,29 @@ export HTTPS_PROXY=http://127.0.0.1:7890
 # 看板
 .venv/bin/streamlit run scripts/dashboard.py --server.port 8766
 # → http://127.0.0.1:8766/
+
+# TradingView watchlist 快照
+.venv/bin/python scripts/fetch-tvscreener-watchlist.py
+.venv/bin/python scripts/watchlist-report.py
 ```
 
 ---
 
+## 数据源
+
+| 来源 | 模块 | 说明 |
+|------|------|------|
+| Yahoo Finance | `whaletrail/data/yfinance_source.py` | 日线 OHLCV + Parquet 缓存 |
+| TradingView Scanner | `whaletrail/data/tvscreener_source.py` | 实时快照（watchlist） |
+| 本地 Parquet | `whaletrail/data/cache.py` | 缓存归并 |
+| YAML Watchlist | `whaletrail/data/watchlist.py` | 关注列表加载（`config/watchlist.yaml`） |
+
+## 脚本入口
+
+详见 `scripts/README.md`。
+
 ## 策略库
+
 
 | 策略 | 文件 | 默认用途 |
 |------|------|----------|
