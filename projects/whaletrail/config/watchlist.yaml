@@ -1,0 +1,103 @@
+# whaletrail-lab watchlist for hourly/daily paper trading.
+#
+# Keep Yahoo symbols for the existing data path and add TradingView symbols for
+# the tvscreener fallback/supplemental source.
+items:
+  - id: gold_futures
+    name: 黄金期货
+    yahoo_symbol: GC=F
+    tv_symbol: COMEX:GC1!
+    asset_class: futures
+    exchange: COMEX
+    tradable: true
+    data_source_priority:
+      - existing_api
+      - tvscreener
+
+  - id: crude_oil_futures
+    name: WTI 原油期货
+    yahoo_symbol: CL=F
+    tv_symbol: NYMEX:CL1!
+    asset_class: futures
+    exchange: NYMEX
+    tradable: true
+    data_source_priority:
+      - existing_api
+      - tvscreener
+
+  - id: sp500_index
+    name: 标普500指数
+    yahoo_symbol: ^GSPC
+    tv_symbol: SP:SPX
+    asset_class: index
+    exchange: SP
+    tradable: false
+    data_source_priority:
+      - existing_api
+      - tvscreener
+
+  - id: spy_etf
+    name: SPY ETF
+    yahoo_symbol: SPY
+    tv_symbol: AMEX:SPY
+    asset_class: etf
+    exchange: AMEX
+    tradable: true
+    data_source_priority:
+      - existing_api
+      - tvscreener
+
+  - id: zijin_mining
+    name: 紫金矿业
+    yahoo_symbol: 601899.SS
+    tv_symbol: SSE:601899
+    asset_class: stock
+    market: china
+    exchange: SSE
+    tradable: true
+    data_source_priority:
+      - tvscreener
+
+  - id: weichai_power
+    name: 潍柴动力
+    yahoo_symbol: 000338.SZ
+    tv_symbol: SZSE:000338
+    asset_class: stock
+    market: china
+    exchange: SZSE
+    tradable: true
+    data_source_priority:
+      - tvscreener
+
+  - id: zhonghong_medical
+    name: 中红医疗
+    yahoo_symbol: 300981.SZ
+    tv_symbol: SZSE:300981
+    asset_class: stock
+    market: china
+    exchange: SZSE
+    tradable: true
+    data_source_priority:
+      - tvscreener
+
+  - id: xiaocheng_tech
+    name: 晓程科技
+    yahoo_symbol: 300139.SZ
+    tv_symbol: SZSE:300139
+    asset_class: stock
+    market: china
+    exchange: SZSE
+    tradable: true
+    data_source_priority:
+      - tvscreener
+
+  - id: jinli_yongci
+    name: 金力永磁
+    yahoo_symbol: 300748.SZ
+    tv_symbol: SZSE:300748
+    asset_class: stock
+    market: china
+    exchange: SZSE
+    tradable: true
+    data_source_priority:
+      - tvscreener
