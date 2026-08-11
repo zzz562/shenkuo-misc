@@ -1,48 +1,56 @@
-# 沈括杂记 · Shen Kuo Miscellany
+# WhaleTrail Lab 🐋
 
-> 「天下之事，靡不毕知。」—— 沈括
+> 跟庄者，顺流而行。不预测风暴，只辨认鲸鱼的尾迹。
 
-**whaletrail-lab** 是一个长期的个人综合空间，用于记录、实验、随想与构建。
+**whaletrail-lab** 是一个以量化交易为锚点的个人实验空间。核心命题：用数据和系统对抗情绪，在被市场教训的过程中持续迭代。
 
-这里没有严格的主题边界——像沈括的《梦溪笔谈》一样，杂学、杂记、杂想皆可。  
-未来会在这里用 Grok 进行各种开发、原型、笔记整理和 Mac Mini 上的长期构建实验。
+不追求完美策略，追求的是：**跑起来 → 看到结果 → 改 → 再跑**。所有代码一步步在 Mac mini 上搭出来，Grok 协作开发，Telegram 日报盯着。
 
-## 定位
+## 核心精神
 
-- 个人实验场（lab / playground / atelier）
-- 随手记录与思考的容器
-- Grok 协作开发的长期主仓库
-- 各种半成品、灵感、脚本、配置的归宿
+- **数据说话。** 回测不撒谎。策略漂亮不算，曲线好才算。
+- **系统化。** 手动盯盘太累，让脚本替你跑。paper-live 每 10 分钟 tick 一次，cron 每天推送日报。
+- **跟庄，不造势。** 大资金走过的水域会留下痕迹。情绪扫描、KOL 追踪、量价信号，都是为了看清鲸鱼尾巴。
+- **小步快跑。** 一个策略 + 一条标线 + 一份日报，验证完再扩展。黄金还没做明白之前，别碰 A 股。
 
-## 目录结构（持续演化中）
+## 当前重心
+
+| 方向 | 说明 |
+|------|------|
+| **黄金 GLD** 主策略 | SMA 交叉、ATR 止损、持续迭代 |
+| **美股对冲** SPY / QQQ | 对照实验，非高频 |
+| **情绪扫描** | X/Twitter KOL 情绪 → 打分 → 信号融合 |
+| **日报 / 看板** | OpenClaw + Telegram 推送；Streamlit 本地看板 `:8766` |
+| **严格不做** | A 股、港股、分钟级/tick 高频、akshare/Tushare、LEAN/Docker |
+
+## 目录结构
 
 ```
 .
-├── notes/           # 随想、读书、观察
-├── experiments/     # 小实验、原型
-├── tools/           # 自用脚本与工具
-├── configs/         # 各种配置备份与思考
-├── projects/        # 稍成形的子项目
-└── archive/         # 不再活跃但值得留存的内容
+├── projects/
+│   └── whaletrail/            ← 唯一 active 项目
+│       ├── whaletrail/        # 核心引擎（策略、回测、存储、风控）
+│       ├── scripts/           # run-backtest / daily-report / paper-live / dashboard / sentiment
+│       ├── config/            # watchlist 等
+│       ├── docs/              # 设计文档与 runbook
+│       ├── data_cache/        # yfinance Parquet 缓存（不入 git）
+│       └── results/           # 回测 / 情绪输出（不入 git）
+├── configs/                   # 环境配置
+├── archive/                   # 旧项目归档（LEAN、gold-paper 等）
+└── notes/                     # 随想
 ```
 
-## 致敬
+## 开发规则
 
-沈括（1031–1095），北宋科学家、工程师、政治家、文学家。  
-一生博学多才，涉猎天文、地理、数学、医学、音乐、军事、考古等众多领域。  
-其代表作《梦溪笔谈》是中国古代科技史上的瑰宝，记录了大量当时领先世界的发现与思考。
-
-这个仓库以他的名字命名，是对「好奇心 + 系统记录 + 跨领域折腾」精神的致敬。
+| 角色 | 路径 | 规则 |
+|------|------|------|
+| Mac mini 主开发 | `~/Projects/whaletrail-lab` | 唯一主源。开发、测试、提交、推送都在这。 |
+| GitHub | `zzz562/whaletrail-lab` | 同步中枢。 |
+| MacBook 查看副本 | `~/github_code/whaletrail-lab` | 默认只查看。刷新：`git fetch && git reset --hard origin/main && git clean -fd` |
 
 ---
 
-**仓库创建于**：2026-05-30  
-**主要使用环境**：Mac Mini + Grok Build  
-**当前状态**：开始阶段，持续生长中
-
-## Development workflow
-
-- **Primary development:** Mac mini `~/Projects/whaletrail-lab`.
-- **MacBook copy:** `~/github_code/whaletrail-lab` is a clean sync/viewing copy unless explicitly stated otherwise.
-- **Sync direction:** Mac mini → GitHub `origin/main` → MacBook.
-- **Legacy cleanup:** `projects/gold-paper/` has been removed; active trading/backtest work lives under `projects/whaletrail/`.
+**创建** 2026-05-30  
+**环境** Mac Mini M4 (macOS 26) + Grok Build + OpenClaw + Ollama  
+**VPS** 阿里云上海轻量（反向隧道）  
+**运行手册** [macmini-runbook](https://github.com/zzz562/ValarMorghulis/blob/main/macmini-runbook/README.md)
