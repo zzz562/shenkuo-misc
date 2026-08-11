@@ -102,14 +102,43 @@ def page_sentiment() -> None:
     c5.metric("📊 扫描", f"{total} 条推文")
     st.caption(f"数据日期: **{latest.get('date', '?')}** · 来源: 18 位黄金 KOL · 每日 09:00 更新")
 
-    # ── History chart ────────────────────────────────────────────
+    # ── History chart (improved) ────────────────────────────────
     history = _load_history()
     if history:
         st.subheader("📊 GSI 历史趋势")
         df_h = pd.DataFrame(history).sort_values("date")
         df_h["date"] = pd.to_datetime(df_h["date"])
-        st.area_chart(df_h.set_index("date")[["gold_sentiment_index"]].rename(
-            columns={"gold_sentiment_index": "GSI"}), use_container_width=True)
+        df_h = df_h.set_index("date")
+
+        # Dual chart: GSI line + bar area
+        import altair as alt
+        source = df_h.reset_index()
+        source["GSI"] = source["gold_sentiment_index"]
+        source["Bullish"] = source["bullish_count"]
+        source["Bearish"] = source["bearish_count"]
+
+        bar = alt.Chart(source).mark_bar(opacity=0.3).encode(
+            x="date:T", y="Bullish:Q", color=alt.value("#16a34a"),
+        ).properties(height=250)
+        bar2 = alt.Chart(source).mark_bar(opacity=0.3).encode(
+            x="date:T", y=alt.Y("Bearish:Q", scale=alt.Scale(domain=[0, source["Bearish"].max() + 1])),
+            color=alt.value("#dc2626"),
+        )
+        line = alt.Chart(source).mark_line(point=True, color="#3b82f6", strokeWidth=3).encode(
+            x="date:T",
+            y=alt.Y("GSI:Q", scale=alt.Scale(domain=[-1, 1])),
+            tooltip=["date", "GSI", "Bullish", "Bearish"],
+        ).properties(height=250)
+
+        chart = (bar + bar2 + line).resolve_scale(y="independent")
+        st.altair_chart(chart, use_container_width=True)
+
+        # Summary table below chart
+        st.caption("每日汇总")
+        tbl = source[["date", "GSI", "Bullish", "Bearish", "neutral_count"]].rename(
+            columns={"neutral_count": "Neutral"}
+        ).tail(10)
+        st.dataframe(tbl.set_index("date"), use_container_width=True)
 
     # ── Distribution + tweet feed ────────────────────────────────
     if entries:
