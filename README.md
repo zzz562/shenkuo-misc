@@ -2,7 +2,7 @@
 
 > 「天下之事，靡不毕知。」—— 沈括
 
-**shenkuo-misc** 是一个长期的个人综合空间，用于记录、实验、随想与构建。
+**whaletrail-lab** 是一个长期的个人综合空间，用于记录、实验、随想与构建。
 
 这里没有严格的主题边界——像沈括的《梦溪笔谈》一样，杂学、杂记、杂想皆可。  
 未来会在这里用 Grok 进行各种开发、原型、笔记整理和 Mac Mini 上的长期构建实验。
@@ -39,3 +39,10 @@
 **仓库创建于**：2026-05-30  
 **主要使用环境**：Mac Mini + Grok Build  
 **当前状态**：开始阶段，持续生长中
+
+## Development workflow
+
+- **Primary development:** Mac mini `~/Projects/whaletrail-lab`.
+- **MacBook copy:** `~/github_code/whaletrail-lab` is a clean sync/viewing copy unless explicitly stated otherwise.
+- **Sync direction:** Mac mini → GitHub `origin/main` → MacBook.
+- **Legacy cleanup:** `projects/gold-paper/` has been removed; active trading/backtest work lives under `projects/whaletrail/`.

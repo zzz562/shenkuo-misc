@@ -40,16 +40,6 @@ build/
 tmp/
 temp/
 
-# LEAN backtest output (regenerated locally)
-projects/gold-paper/algorithm/backtests/
-projects/gold-paper/dashboard/output/
-projects/gold-paper/.venv/
-projects/gold-paper/logs/
-projects/gold-paper/paper_live/bars.csv
-projects/gold-paper/paper_live/state.json
-projects/gold-paper/paper_live/trader_state.json
-projects/gold-paper/paper_live/journal.jsonl
-
 # Secrets (never commit these)
 .env
 .env.local
@@ -64,3 +54,7 @@ ehthumbs.db
 projects/whaletrail/data_cache/
 projects/whaletrail/results/
 projects/whaletrail/.venv/
+
+# Runtime logs
+*.err
+projects/whaletrail/logs/

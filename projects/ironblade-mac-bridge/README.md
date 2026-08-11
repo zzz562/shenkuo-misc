@@ -18,7 +18,7 @@ OpenClaw is the bridge program — no separate bot daemon needed. It runs as a m
 
 ```bash
 # Check everything is healthy
-~/projects/shenkuo-misc/projects/ironblade-mac-bridge/health-check.sh
+~/projects/whaletrail-lab/projects/ironblade-mac-bridge/health-check.sh
 
 # Send a test message to yourself on Telegram
 openclaw message send --channel telegram --target 5102138680 --message "ping"

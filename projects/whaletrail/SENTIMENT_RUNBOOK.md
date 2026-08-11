@@ -9,7 +9,7 @@
 
 | 维度 | 说明 |
 |------|------|
-| 在工程里 | `shenkuo-misc/projects/whaletrail/` 的子模块 |
+| 在工程里 | `whaletrail-lab/projects/whaletrail/` 的子模块 |
 | 代码 | `scripts/sentiment.py` |
 | 数据 | `results/sentiment_*.json` |
 | 看板 | `dashboard.py` → 🐋 情绪监控 分页 |
@@ -63,7 +63,7 @@ sentiment.py
 ### 手动跑一次
 
 ```bash
-cd ~/Projects/shenkuo-misc/projects/whaletrail
+cd ~/Projects/whaletrail-lab/projects/whaletrail
 
 # 单 KOL 测试
 .venv/bin/python3 scripts/sentiment.py --account PeterLBrandt
@@ -94,7 +94,7 @@ openclaw cron run whaletrail-sentiment
 # 删除重建
 openclaw cron rm <id>
 openclaw cron add --name whaletrail-sentiment --cron "0 9 * * *" --tz Asia/Shanghai \
-  --command "cd ~/Projects/shenkuo-misc/projects/whaletrail && .venv/bin/python3 scripts/sentiment.py" \
+  --command "cd ~/Projects/whaletrail-lab/projects/whaletrail && .venv/bin/python3 scripts/sentiment.py" \
   --channel telegram --to 5102138680 --announce
 ```
 

@@ -24,9 +24,9 @@
 ## 快速开始
 
 ```bash
-cd ~/Projects/shenkuo-misc/projects/whaletrail   # Mac mini
+cd ~/Projects/whaletrail-lab/projects/whaletrail   # Mac mini
 # 或
-cd ~/github_code/shenkuo-misc/projects/whaletrail  # MacBook
+cd ~/github_code/whaletrail-lab/projects/whaletrail  # MacBook
 
 # 依赖
 .venv/bin/pip install -r requirements.txt
@@ -117,6 +117,6 @@ whaletrail/
 
 | 路径 | 说明 |
 |------|------|
-| 本仓库 | `projects/whaletrail/` in [shenkuo-misc](https://github.com/zzz562/shenkuo-misc) |
-| Mac mini 运行 | `~/Projects/shenkuo-misc/projects/whaletrail/` |
+| 本仓库 | `projects/whaletrail/` in [whaletrail-lab](https://github.com/zzz562/whaletrail-lab) |
+| Mac mini 运行 | `~/Projects/whaletrail-lab/projects/whaletrail/` |
 | 运维手册 | ValarMorghulis `macmini-runbook/` |

@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
-# WhaleTrail daily report: backtest -> Ollama analysis -> markdown output
+# WhaleTrail daily report: backtest -> direct summary -> markdown output
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPTS="$ROOT/scripts"
 PY="$ROOT/.venv/bin/python3"
-export HTTPS_PROXY=http://127.0.0.1:7890
+
+# Proxy fallback: try configured proxy, continue without if unavailable
+if curl -s --connect-timeout 2 --max-time 3 -x http://127.0.0.1:7890 https://www.google.com > /dev/null 2>&1; then
+    export HTTPS_PROXY=http://127.0.0.1:7890
+else
+    # Try without proxy (direct connection or system proxy)
+    unset HTTPS_PROXY
+    # If yfinance still needs proxy, it'll fail with a clear error
+fi
 
 echo "🥇 **WhaleTrail 日报**"
 echo ""
@@ -24,8 +32,8 @@ echo "📊 ${2:-GLD}  ${3:-2018-01-01} -> ${4:-2024-12-31}  (黄金主线)"
 echo "💰 权益: \$${FINAL_EQ}  |  收益: ${RETURN_PCT}%  |  交易: ${TRADE_N}次"
 echo ""
 
-# Step 2: Ollama analysis
-echo "🤖 AI 分析..."
+# Step 2: direct summary (no LLM — qwen3:4b hallucinated)
+echo "📊 回测摘要..."
 "$PY" "$SCRIPTS/analyze.py"
 
 echo ""

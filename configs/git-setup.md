@@ -16,7 +16,7 @@ Last verified: 2026-07-07
 |-------|--------|
 | SSH (`git@github.com`) | OK — account `zzz562` |
 | GitHub CLI (`gh`) | OK — SSH protocol, `repo` scope |
-| Remote for this repo | `git@github.com:zzz562/shenkuo-misc.git` |
+| Remote for this repo | `git@github.com:zzz562/whaletrail-lab.git` |
 
 SSH key: `~/.ssh/id_ed25519` (configured in `~/.ssh/config` with Keychain)
 
@@ -33,7 +33,7 @@ credential.helper = osxkeychain
 
 | Path | Remote | Notes |
 |------|--------|-------|
-| `~/projects/shenkuo-misc` | `zzz562/shenkuo-misc` | Main Grok collaboration repo |
+| `~/projects/whaletrail-lab` | `zzz562/whaletrail-lab` | Main Grok collaboration repo |
 | `~/github/Lean` | `QuantConnect/Lean` (HTTPS) | QuantConnect engine; local changes present |
 | `~/.openclaw/workspace` | (uninitialized) | OpenClaw agent workspace |
 
@@ -45,6 +45,6 @@ ssh -T git@github.com
 gh auth status
 
 # Work in this repo
-cd ~/projects/shenkuo-misc
-grok --cwd ~/projects/shenkuo-misc
+cd ~/projects/whaletrail-lab
+grok --cwd ~/projects/whaletrail-lab
 ```
