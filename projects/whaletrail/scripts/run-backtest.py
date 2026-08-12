@@ -4,7 +4,7 @@
 Usage:
   run-backtest.py [strategy] [symbol] [start] [end] [cash]
 
-Defaults: gold_sma GLD 2018-01-01 2024-12-31 100000
+Defaults: gold_sma GLD 2018-01-01 2026-08-12 100000
 """
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def main() -> None:
     strategy_name = sys.argv[1] if len(sys.argv) > 1 else "gold_sma"
     symbol = sys.argv[2] if len(sys.argv) > 2 else "GLD"
     start_str = sys.argv[3] if len(sys.argv) > 3 else "2018-01-01"
-    end_str = sys.argv[4] if len(sys.argv) > 4 else "2024-12-31"
+    end_str = sys.argv[4] if len(sys.argv) > 4 else "2026-08-12"
     cash = float(sys.argv[5]) if len(sys.argv) > 5 else 100_000.0
 
     # Validate scope (raises on A-share / HK)

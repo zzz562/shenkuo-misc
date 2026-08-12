@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from whaletrail.engine.types import Order, OrderSide, OrderType
+from whaletrail.engine.broker import Order, OrderSide, OrderType
 
 
 class Strategy(ABC):
