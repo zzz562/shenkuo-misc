@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
+from datetime import datetime
 from typing import Any, Optional
 
 from whaletrail.storage.schema import create_tables
@@ -34,6 +35,43 @@ class Repository:
             self._conn = create_tables(self.db_path)
             self._conn.row_factory = sqlite3.Row
         return self._conn
+
+
+    def save_quote_snapshots(self, rows: list[dict]) -> int:
+        now = datetime.now().isoformat()
+        batch = [
+            (
+                r.get("tv_symbol", ""),
+                r.get("local_name"),
+                r.get("yahoo_symbol"),
+                r.get("asset_class"),
+                r.get("exchange"),
+                r.get("close"),
+                r.get("change_percent"),
+                r.get("volume"),
+                r.get("rsi"),
+                r.get("sma20"),
+                r.get("sma50"),
+                r.get("sma200"),
+                r.get("recommend_all"),
+                r.get("description"),
+                r.get("source", "tvscreener"),
+                r.get("endpoint", "global"),
+                json.dumps(r.get("raw"), ensure_ascii=False) if r.get("raw") else None,
+                r.get("timestamp", now),
+            )
+            for r in rows
+        ]
+        cur = self.conn.executemany(
+            """INSERT INTO quote_snapshots
+               (tv_symbol, local_name, yahoo_symbol, asset_class, exchange,
+                close, change_percent, volume, rsi, sma20, sma50, sma200,
+                recommend_all, description, source, endpoint, raw_json, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            batch,
+        )
+        self.conn.commit()
+        return cur.rowcount
 
     def close(self) -> None:
         if self._conn is not None:

@@ -51,6 +51,28 @@ CREATE TABLE IF NOT EXISTS portfolio_snapshots (
     positions_json  TEXT    NOT NULL   -- JSON blob: {symbol: {qty, avg_cost, market_value}}
 );
 
+
+CREATE TABLE IF NOT EXISTS quote_snapshots (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    tv_symbol       TEXT    NOT NULL,
+    local_name      TEXT,
+    yahoo_symbol    TEXT,
+    asset_class     TEXT,
+    exchange        TEXT,
+    close           REAL,
+    change_percent  REAL,
+    volume          REAL,
+    rsi             REAL,
+    sma20           REAL,
+    sma50           REAL,
+    sma200          REAL,
+    recommend_all   REAL,
+    description     TEXT,
+    source          TEXT    NOT NULL DEFAULT tvscreener,
+    endpoint        TEXT    NOT NULL DEFAULT global,
+    raw_json        TEXT,
+    timestamp       TEXT    NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_snapshots_run_id ON portfolio_snapshots(run_id);
 """
 

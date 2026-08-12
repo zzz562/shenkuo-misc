@@ -101,3 +101,36 @@ items:
     tradable: true
     data_source_priority:
       - tvscreener
+
+  - id: shandong_molong
+    name: 山东墨龙
+    yahoo_symbol: 002490.SZ
+    tv_symbol: SZSE:002490
+    asset_class: stock
+    market: china
+    exchange: SZSE
+    tradable: true
+    data_source_priority:
+      - tvscreener
+
+  - id: shouhua_gas
+    name: 首华燃气
+    yahoo_symbol: 300483.SZ
+    tv_symbol: SZSE:300483
+    asset_class: stock
+    market: china
+    exchange: SZSE
+    tradable: true
+    data_source_priority:
+      - tvscreener
+
+  - id: tongyuan_oil
+    name: 通源石油
+    yahoo_symbol: 300164.SZ
+    tv_symbol: SZSE:300164
+    asset_class: stock
+    market: china
+    exchange: SZSE
+    tradable: true
+    data_source_priority:
+      - tvscreener
