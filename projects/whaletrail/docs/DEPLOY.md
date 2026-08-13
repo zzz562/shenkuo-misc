@@ -57,6 +57,7 @@ openclaw cron run whaletrail-sentiment   # 手动触发情绪扫描
 |------|------|------|
 | `whaletrail-daily` | 工作日 08:30 CST | `daily-report.sh gold_sma GLD` → Telegram |
 | `whaletrail-sentiment` | 每日 09:00 CST | X KOL 情绪扫描 → Telegram |
+| `whaletrail-ashare` | 工作日 15:30 CST | A股低频率 paper（`ashare-paper.py`）→ Telegram |
 
 ## 日志
 
