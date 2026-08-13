@@ -176,6 +176,32 @@ class Repository:
         return [self._row_to_dict(r, "runs") for r in rows]
 
     # ------------------------------------------------------------------
+    # Quote snapshots
+    # ------------------------------------------------------------------
+
+    def latest_quote_snapshots(self) -> list[dict[str, Any]]:
+        """Return the most recent quote snapshot per symbol, newest first.
+
+        Uses the highest row id per ``tv_symbol`` so multiple fetches on
+        the same day do not produce duplicates.
+        """
+        rows = self.conn.execute(
+            """SELECT * FROM quote_snapshots
+               WHERE id IN (
+                   SELECT MAX(id) FROM quote_snapshots GROUP BY tv_symbol
+               )
+               ORDER BY timestamp DESC"""
+        ).fetchall()
+        return [self._row_to_dict(r, "quote_snapshots") for r in rows]
+
+    def latest_quote_timestamp(self) -> Optional[str]:
+        """Return the timestamp of the newest quote snapshot, or *None*."""
+        row = self.conn.execute(
+            "SELECT MAX(timestamp) FROM quote_snapshots"
+        ).fetchone()
+        return row[0] if row and row[0] else None
+
+    # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
@@ -188,4 +214,12 @@ class Repository:
             metrics_raw = d.get("metrics_json")
             d["metrics"] = json.loads(metrics_raw) if metrics_raw else {}
             d.pop("metrics_json", None)
+        elif table == "quote_snapshots":
+            raw = d.get("raw_json")
+            if raw:
+                try:
+                    d["raw"] = json.loads(raw)
+                except (TypeError, ValueError):
+                    d["raw"] = raw
+            d.pop("raw_json", None)
         return d

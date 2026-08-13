@@ -6,6 +6,46 @@ import math
 from typing import Any
 
 
+def compute_trade_pnl(trades: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Enrich trades with realised P&L using FIFO cost-basis matching.
+
+    Walks the trades in chronological order, pairing each sell against
+    the oldest open buy lot.  Closing (sell) trades get ``pnl`` (total
+    realised profit/loss) and ``pnl_per_share`` added; buy trades are
+    passed through unchanged.  Original dicts are not mutated.
+
+    Works with either ``"buy"/"sell"`` or ``"BUY"/"SELL"`` sides.
+    """
+    out: list[dict[str, Any]] = []
+    lots: list[dict[str, float]] = []  # open buy lots: {qty, price}
+
+    for trade in trades:
+        rec = dict(trade)
+        side = str(trade.get("side", "")).lower()
+        qty = float(trade.get("quantity", 0.0) or 0.0)
+        price = float(trade.get("price", 0.0) or 0.0)
+
+        if side == "buy":
+            if qty > 0:
+                lots.append({"qty": qty, "price": price})
+        elif side == "sell":
+            remaining = qty
+            pnl = 0.0
+            while remaining > 1e-9 and lots:
+                lot = lots[0]
+                take = min(remaining, lot["qty"])
+                pnl += (price - lot["price"]) * take
+                lot["qty"] -= take
+                remaining -= take
+                if lot["qty"] <= 1e-9:
+                    lots.pop(0)
+            rec["pnl"] = round(pnl, 6)
+            rec["pnl_per_share"] = round(pnl / qty, 6) if qty else 0.0
+        out.append(rec)
+
+    return out
+
+
 def calculate_metrics(
     trades: list[dict[str, Any]],
     equity_curve: list[float],
@@ -116,7 +156,7 @@ def calculate_metrics(
 
     # ---- Win rate & profit factor ---------------------------------------
     # Consider *sell* trades (closing trades) for realised P&L.
-    closing_trades = [t for t in trades if t.get("side") == "sell"]
+    closing_trades = [t for t in trades if str(t.get("side", "")).lower() == "sell"]
     if closing_trades:
         wins = [t for t in closing_trades if (t.get("pnl") or 0.0) > 0]
         losses = [t for t in closing_trades if (t.get("pnl") or 0.0) < 0]
