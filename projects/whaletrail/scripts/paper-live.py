@@ -49,7 +49,8 @@ SCAN_JOBS = [
 STATE_FILE = ROOT / "results" / "paper_live_state.json"
 TG_TOKEN = os.environ.get("TG_BOT_TOKEN", "")
 TG_CHAT_ID = os.environ.get("TG_CHAT_ID", "5102138680")
-PROXY = os.environ.get("HTTPS_PROXY", "http://127.0.0.1:7890")
+# Proxy config: WT_PROXY_URL → HTTPS_PROXY → default. See docs/ENVIRONMENT.md.
+PROXY = os.environ.get("WT_PROXY_URL") or os.environ.get("HTTPS_PROXY") or "http://127.0.0.1:7890"
 
 os.environ.setdefault("HTTPS_PROXY", PROXY)
 os.environ.setdefault("HTTP_PROXY", PROXY)

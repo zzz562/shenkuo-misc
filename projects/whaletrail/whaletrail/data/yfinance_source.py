@@ -28,14 +28,35 @@ class YFinanceSource(DataSource):
     def get_daily(self, symbol: str, start: date, end: date) -> pd.DataFrame:
         parsed = parse_symbol(symbol)
         ticker = parsed.ticker
+        start_ts = pd.Timestamp(start)
+        end_ts = pd.Timestamp(end)
 
-        # 1) Hit cache
-        cached = self._cache.get(ticker, start, end)
-        if cached is not None and len(cached) > 0:
-            logger.debug("cache hit %s (%d rows)", ticker, len(cached))
-            return cached
+        # Cache coverage check: a partial slice is NOT a valid hit, otherwise
+        # backtests silently run on truncated data. Missing head/tail ranges
+        # are fetched and merged; internal gaps are treated as market holidays.
+        cached = self._cache.get(ticker)
+        if cached is not None and not cached.empty:
+            first, last = cached.index.min(), cached.index.max()
+            if first <= start_ts and last >= end_ts:
+                logger.debug("cache hit %s (%d rows)", ticker, len(cached))
+                return cached[(cached.index >= start_ts) & (cached.index <= end_ts)]
 
-        # 2) Fetch
+            if first > start_ts:
+                self._fetch_and_cache(ticker, start, (first - pd.Timedelta(days=1)).date())
+            if last < end_ts:
+                self._fetch_and_cache(ticker, (last + pd.Timedelta(days=1)).date(), end)
+
+            cached = self._cache.get(ticker)
+            if cached is not None and not cached.empty:
+                return cached[(cached.index >= start_ts) & (cached.index <= end_ts)]
+            return _empty_df()
+
+        # Cold cache → fetch full range.
+        df = self._fetch_and_cache(ticker, start, end)
+        return df if df is not None and not df.empty else _empty_df()
+
+    def _fetch_and_cache(self, ticker: str, start: date, end: date) -> pd.DataFrame:
+        """Fetch one range from yfinance, normalise it, and merge into cache."""
         auto_adjust = ticker not in self._RAW_SYMBOLS
         logger.info("yfinance fetch %s %s→%s", ticker, start.isoformat(), end.isoformat())
 
@@ -64,7 +85,6 @@ class YFinanceSource(DataSource):
         if "volume" in df.columns:
             df["volume"] = df["volume"].fillna(0).astype("int64")
 
-        # 3) Cache
         self._cache.put(ticker, df)
         return df
 

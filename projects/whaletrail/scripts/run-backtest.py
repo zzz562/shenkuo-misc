@@ -17,16 +17,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from whaletrail.data.layer import DataLayer
 from whaletrail.data.symbols import parse_symbol
-from whaletrail.data.yfinance_source import YFinanceSource
 from whaletrail.engine.backtester import Backtester
 from whaletrail.metrics.performance import calculate_metrics, compute_trade_pnl
 from whaletrail.storage.repository import Repository
 from whaletrail.strategy.registry import get_strategy_class
 
-# Default HTTPS proxy for Yahoo if not set (Mac mini Clash)
-os.environ.setdefault("HTTPS_PROXY", os.environ.get("HTTPS_PROXY", "http://127.0.0.1:7890"))
-os.environ.setdefault("HTTP_PROXY", os.environ.get("HTTP_PROXY", "http://127.0.0.1:7890"))
+# Proxy config: WT_PROXY_URL → HTTPS_PROXY → default (Mac mini Clash).
+# See docs/ENVIRONMENT.md "配置项（环境变量）".
+PROXY = os.environ.get("WT_PROXY_URL") or os.environ.get("HTTPS_PROXY") or "http://127.0.0.1:7890"
+os.environ.setdefault("HTTPS_PROXY", PROXY)
+os.environ.setdefault("HTTP_PROXY", PROXY)
 
 def main() -> None:
     strategy_name = sys.argv[1] if len(sys.argv) > 1 else "gold_sma"
@@ -52,7 +54,7 @@ def main() -> None:
         sys.exit(1)
 
     strategy = StrategyClass()
-    src = YFinanceSource()
+    src = DataLayer()
 
     bt = Backtester(
         symbols=[ticker],

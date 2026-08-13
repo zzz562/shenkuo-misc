@@ -6,9 +6,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPTS="$ROOT/scripts"
 PY="$ROOT/.venv/bin/python3"
 
-# Proxy fallback: try configured proxy, continue without if unavailable
-if curl -s --connect-timeout 2 --max-time 3 -x http://127.0.0.1:7890 https://www.google.com > /dev/null 2>&1; then
-    export HTTPS_PROXY=http://127.0.0.1:7890
+# Proxy config: WT_PROXY_URL → HTTPS_PROXY → default. See docs/ENVIRONMENT.md.
+PROXY="${WT_PROXY_URL:-${HTTPS_PROXY:-http://127.0.0.1:7890}}"
+if curl -s --connect-timeout 2 --max-time 3 -x "$PROXY" https://www.google.com > /dev/null 2>&1; then
+    export HTTPS_PROXY="$PROXY"
 else
     # Try without proxy (direct connection or system proxy)
     unset HTTPS_PROXY

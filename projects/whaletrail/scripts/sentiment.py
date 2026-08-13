@@ -32,14 +32,16 @@ BEARER_TOKEN = os.environ.get(
     "AAAAAAAAAAAAAAAAAAAAADgc%2FAEAAAAAD9qWDxYIkEWNKx1ZJgdjh0hcaOM%3DiWf0oM3TXl0JStLtXWP5ay2QIG3xEJoC7WCrcrEXEFVuDnRzwm",
 )
 OLLAMA_MODEL = "qwen3:4b"
-OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
+# Service addresses: WT_* env vars override the Mac mini defaults.
+# See docs/ENVIRONMENT.md "配置项（环境变量）".
+OLLAMA_URL = os.environ.get("WT_OLLAMA_URL", "http://127.0.0.1:11434/api/generate")
 # deepseek-chat resolves to deepseek-v4-flash (non-reasoning) on the API.
 DEEPSEEK_MODEL = "deepseek-chat"
 DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 BATCH_SIZE = 25
 RESULTS_DIR = ROOT / "results"
 STATE_FILE = RESULTS_DIR / "sentiment_state.json"
-PROXY = os.environ.get("HTTPS_PROXY", "http://127.0.0.1:7890")
+PROXY = os.environ.get("WT_PROXY_URL") or os.environ.get("HTTPS_PROXY") or "http://127.0.0.1:7890"
 
 os.environ.setdefault("HTTPS_PROXY", PROXY)
 
@@ -98,7 +100,12 @@ def _deepseek_api_key() -> Optional[str]:
     key = os.environ.get("DEEPSEEK_API_KEY")
     if key:
         return key
-    env_file = Path.home() / ".openclaw/service-env/ai.openclaw.gateway.env"
+    env_file = Path(
+        os.environ.get(
+            "WT_OPENCLAW_ENV_FILE",
+            str(Path.home() / ".openclaw/service-env/ai.openclaw.gateway.env"),
+        )
+    )
     try:
         for line in env_file.read_text().splitlines():
             m = re.match(r"export DEEPSEEK_API_KEY='(.*)'", line)
