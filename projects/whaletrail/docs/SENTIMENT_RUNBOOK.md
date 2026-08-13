@@ -12,7 +12,7 @@
 | 在工程里 | `whaletrail-lab/projects/whaletrail/` 的子模块 |
 | 代码 | `scripts/sentiment.py` |
 | 数据 | `results/sentiment_*.json` |
-| 看板 | `dashboard.py` → 🐋 情绪监控 分页 |
+| 看板 | `dashboard.py` → 🐋 情绪监控 分页（样式见 `docs/DASHBOARD.md`） |
 | 与 paper-live | 当前**独立运行**；Phase 2 融合（待做） |
 | 与回测引擎 | 不直接耦合 |
 

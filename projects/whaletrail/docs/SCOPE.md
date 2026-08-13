@@ -15,7 +15,7 @@
 | 数据 | 日线 OHLCV，yfinance + 本地 Parquet 缓存 |
 | 引擎 | 事件驱动回测、模拟佣金（美股风格） |
 | 策略 | gold_sma 为主；bollinger/turtle/momentum/ma_cross 对照 |
-| 交付 | CLI、Streamlit 看板、Telegram 日报 cron |
+| 交付 | CLI、Streamlit 看板（`docs/DASHBOARD.md`）、Telegram 日报 cron |
 
 ## Out of scope
 

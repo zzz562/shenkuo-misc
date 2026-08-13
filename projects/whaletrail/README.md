@@ -43,7 +43,7 @@ export HTTPS_PROXY=http://127.0.0.1:7890
 # 日报（回测 + Ollama 中文摘要）
 ./scripts/daily-report.sh gold_sma GLD
 
-# 看板
+# 看板（暗色终端风；设计/运维见 docs/DASHBOARD.md）
 .venv/bin/streamlit run scripts/dashboard.py --server.port 8766
 # → http://127.0.0.1:8766/
 
@@ -91,7 +91,7 @@ Telegram / Cron
 scripts/run-backtest.py  →  JSON results/
 scripts/analyze.py       →  Ollama 一句话中文
 scripts/daily-report.sh  →  串联日报
-scripts/dashboard.py     →  Streamlit :8766
+scripts/dashboard.py     →  Streamlit :8766（见 docs/DASHBOARD.md）
 
 whaletrail/
 ├── data/          YFinanceSource + ParquetCache
@@ -138,3 +138,4 @@ whaletrail/
 | 本仓库 | `projects/whaletrail/` in [whaletrail-lab](https://github.com/zzz562/whaletrail-lab) |
 | Mac mini 运行 | `~/Projects/whaletrail-lab/projects/whaletrail/` |
 | 运维手册 | ValarMorghulis `macmini-runbook/` |
+| 看板设计 / 运维 | `docs/DASHBOARD.md` |
