@@ -31,8 +31,8 @@ cd ~/github_code/whaletrail-lab/projects/whaletrail  # MacBook
 # 依赖
 .venv/bin/pip install -r requirements.txt
 
-# 拉数据（需要代理时）
-export HTTPS_PROXY=http://127.0.0.1:7890
+# 拉数据（需要代理时，见 docs/ENVIRONMENT.md）
+export WT_PROXY_URL=http://127.0.0.1:7890   # 或 HTTPS_PROXY
 
 # 黄金主回测
 .venv/bin/python scripts/run-backtest.py gold_sma GLD 2018-01-01 2024-12-31 100000
@@ -137,5 +137,5 @@ whaletrail/
 |------|------|
 | 本仓库 | `projects/whaletrail/` in [whaletrail-lab](https://github.com/zzz562/whaletrail-lab) |
 | Mac mini 运行 | `~/Projects/whaletrail-lab/projects/whaletrail/` |
-| 运维手册 | ValarMorghulis `macmini-runbook/` |
+| Mac mini 运维 | `docs/DEPLOY.md` |
 | 看板设计 / 运维 | `docs/DASHBOARD.md` |
