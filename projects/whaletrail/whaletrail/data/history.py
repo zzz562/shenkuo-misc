@@ -42,7 +42,9 @@ def build_daily_history(db_path: str | Path, tv_symbol: str) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame(columns=_OHLCV_COLUMNS)
 
-    df["date"] = pd.to_datetime(df["timestamp"]).dt.normalize()
+    # Timestamps are ISO8601 but mixed precision (some omit microseconds),
+    # which breaks pandas' format inference. Keep only second precision.
+    df["date"] = pd.to_datetime(df["timestamp"].astype(str).str[:19]).dt.normalize()
     for col in ("open", "high", "low", "close", "volume"):
         if col not in df.columns:
             df[col] = None
