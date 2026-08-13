@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""WhaleTrail Dashboard — 回测 / 实时信号 / 情绪 / Watchlist / 运行状态."""
+"""WhaleTrail Dashboard — 回测 / 实时信号 / 情绪 / Watchlist / 运行状态.
+
+Dark terminal-style UI (Bloomberg/Fortress-inspired): deep navy surfaces,
+amber gold accent, tabular monospace numerics, semantic green/red.
+"""
 from __future__ import annotations
 
 import json
@@ -28,16 +32,179 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = RESULTS_DIR / "whaletrail.db"
 DATA_CACHE_DIR = ROOT / "data_cache"
 
-SCORE_COLORS = {"bullish": "#16a34a", "bearish": "#dc2626", "neutral": "#6b7280"}
+SCORE_COLORS = {"bullish": "#4ade80", "bearish": "#f87171", "neutral": "#8b98a9"}
 SCORE_EMOJI = {"bullish": "📈", "bearish": "📉", "neutral": "➖"}
-SIDE_EMOJI = {"BUY": "🟢 买入", "SELL": "🔴 卖出", "buy": "🟢 买入", "sell": "🔴 卖出"}
 
+# ═══════════════════════════════════════════════════════════════════
+#  Design system (dark terminal)
+# ═══════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-.big-metric { font-size: 2.4rem; font-weight: 700; }
-.sentiment-card { border-left: 4px solid #3b82f6; padding: 0.8rem 1rem; margin: 0.3rem 0; border-radius: 6px; background: #f8fafc; }
-.tweet-body { font-size: 0.95rem; line-height: 1.5; color: #1e293b; }
-.meta-row { color: #64748b; font-size: 0.8rem; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  --wt-bg: #0a0e17;
+  --wt-surface: #111826;
+  --wt-surface2: #0d1320;
+  --wt-border: #1e2a3a;
+  --wt-text: #e6edf3;
+  --wt-muted: #8b98a9;
+  --wt-gold: #e6b450;
+  --wt-blue: #38bdf8;
+  --wt-up: #4ade80;
+  --wt-down: #f87171;
+  --wt-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+html, body, .stApp { background: var(--wt-bg); color: var(--wt-text);
+  font-family: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif; }
+
+.block-container { padding: 1.2rem 2rem 2.5rem; max-width: 1500px; }
+
+#MainMenu, footer { visibility: hidden; height: 0; }
+header[data-testid="stHeader"] { background: transparent; }
+.stAppDeployButton, [data-testid="stToolbar"], [data-testid="stDecoration"],
+[data-testid="stStatusWidget"] { display: none !important; }
+
+/* ── Sidebar ─────────────────────────────────────────────────── */
+[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, var(--wt-surface2), #0b101a);
+  border-right: 1px solid var(--wt-border);
+}
+[data-testid="stSidebar"] * { font-family: 'Inter', sans-serif; }
+
+.brand { display: flex; align-items: center; gap: 12px; padding: 6px 0 18px;
+  border-bottom: 1px solid var(--wt-border); margin-bottom: 14px; }
+.brand-logo { font-size: 1.9rem; line-height: 1; }
+.brand-title { font-weight: 800; font-size: 1.15rem; letter-spacing: -.01em; }
+.brand-sub { font-size: 10px; letter-spacing: .22em; color: var(--wt-gold);
+  font-weight: 700; margin-top: 2px; }
+
+/* vertical nav — hide radio pips, treat options as menu rows */
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] { display: none !important; }
+[data-testid="stSidebar"] [data-testid="stRadioGroup"] { gap: 4px !important; }
+[data-testid="stRadioOption"] {
+  background: transparent !important; border: 1px solid transparent !important;
+  border-radius: 8px !important; padding: 7px 10px !important;
+  margin: 0 !important; }
+[data-testid="stRadioOption"] p { color: var(--wt-muted) !important; font-size: .92rem !important; margin: 0 !important; }
+[data-testid="stRadioOption"]:hover { background: var(--wt-surface) !important; }
+[data-testid="stRadioOption"]:hover p { color: var(--wt-text) !important; }
+[data-testid="stRadioOption"][data-selected="true"] {
+  background: var(--wt-surface) !important; border-color: var(--wt-border) !important; }
+[data-testid="stRadioOption"][data-selected="true"] p { color: var(--wt-gold) !important; font-weight: 600 !important; }
+[data-testid="stRadioOption"] > div > div > div:first-child { display: none !important; }
+
+/* ── Page header ─────────────────────────────────────────────── */
+.kicker { font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--wt-gold); font-weight: 700; margin-bottom: 4px; }
+.page-title { font-size: 1.65rem; font-weight: 800; letter-spacing: -.02em;
+  margin: 0 0 2px; }
+.page-sub { color: var(--wt-muted); font-size: .85rem; margin-bottom: 16px; }
+
+/* ── Metric cards ────────────────────────────────────────────── */
+.m-card {
+  background: linear-gradient(180deg, var(--wt-surface), #0f1622);
+  border: 1px solid var(--wt-border); border-radius: 12px;
+  padding: 13px 16px 12px; position: relative; overflow: hidden;
+  height: 100%; box-sizing: border-box; }
+.m-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0;
+  height: 2px; background: var(--m-accent, var(--wt-gold)); opacity: .9; }
+.m-label { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--wt-muted); font-weight: 600; }
+.m-value { font-family: var(--wt-mono); font-size: 1.75rem; font-weight: 700;
+  margin-top: 7px; font-variant-numeric: tabular-nums; color: var(--wt-text);
+  letter-spacing: -.02em; line-height: 1.1; }
+.m-delta { font-size: .82rem; margin-top: 5px; font-variant-numeric: tabular-nums;
+  font-weight: 500; }
+.m-sub { font-size: .76rem; color: var(--wt-muted); margin-top: 2px;
+  font-variant-numeric: tabular-nums; }
+
+/* ── Pills ───────────────────────────────────────────────────── */
+.pill { display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; letter-spacing: .03em; font-variant-numeric: tabular-nums; }
+.pill-ok    { background: rgba(74,222,128,.1);  color: var(--wt-up);   border: 1px solid rgba(74,222,128,.35); }
+.pill-err   { background: rgba(248,113,113,.1); color: var(--wt-down); border: 1px solid rgba(248,113,113,.35); }
+.pill-warn  { background: rgba(251,191,36,.1);  color: #fbbf24;       border: 1px solid rgba(251,191,36,.35); }
+.pill-mut   { background: rgba(139,152,169,.08); color: var(--wt-muted); border: 1px solid rgba(139,152,169,.3); }
+.pill-buy   { background: rgba(74,222,128,.1);  color: var(--wt-up);   border: 1px solid rgba(74,222,128,.35); }
+.pill-sell  { background: rgba(248,113,113,.1); color: var(--wt-down); border: 1px solid rgba(248,113,113,.35); }
+
+/* ── Service rows ────────────────────────────────────────────── */
+.svc { display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 14px; border: 1px solid var(--wt-border); border-radius: 10px;
+  background: var(--wt-surface2); margin-bottom: 8px; }
+.svc-name { font-weight: 600; font-size: .9rem; }
+.svc-port { font-family: var(--wt-mono); color: var(--wt-muted); font-size: .78rem; }
+
+/* ── Ticker tape ─────────────────────────────────────────────── */
+.tape { overflow: hidden; border: 1px solid var(--wt-border); border-radius: 10px;
+  background: var(--wt-surface2); margin: 4px 0 18px; }
+.tape-inner { display: inline-flex; gap: 30px; padding: 9px 16px;
+  white-space: nowrap; animation: wt-tape 60s linear infinite; }
+.tape-inner:hover { animation-play-state: paused; }
+@keyframes wt-tape { from { transform: translateX(0); }
+  to { transform: translateX(-50%); } }
+.tape-item { font-family: var(--wt-mono); font-size: 12px; color: var(--wt-muted);
+  font-variant-numeric: tabular-nums; }
+.tape-item b { color: var(--wt-text); font-weight: 600; }
+.tape-up { color: var(--wt-up); }
+.tape-down { color: var(--wt-down); }
+
+/* ── Sentiment cards ─────────────────────────────────────────── */
+.sentiment-card {
+  border-left: 4px solid var(--wt-blue); padding: .75rem 1rem; margin: .4rem 0;
+  border-radius: 10px; background: var(--wt-surface);
+  border-top: 1px solid var(--wt-border); border-right: 1px solid var(--wt-border);
+  border-bottom: 1px solid var(--wt-border); }
+.tweet-body { font-size: .92rem; line-height: 1.55; color: var(--wt-text); margin-top: 4px; }
+.meta-row { color: var(--wt-muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
+
+/* ── Tables (native + pandas Styler HTML) ────────────────────── */
+[data-testid="stDataFrame"] { border: 1px solid var(--wt-border); border-radius: 10px; overflow: hidden; }
+table.dataframe { border-collapse: collapse; width: 100%; font-size: 12.5px;
+  background: var(--wt-surface); }
+table.dataframe th {
+  background: var(--wt-surface2); color: var(--wt-muted); text-transform: uppercase;
+  font-size: 10.5px; letter-spacing: .1em; padding: 8px 12px; text-align: right;
+  border-bottom: 1px solid var(--wt-border); font-weight: 700; }
+table.dataframe th:first-child { text-align: left; }
+table.dataframe td { padding: 6px 12px; border-bottom: 1px solid #182231;
+  font-variant-numeric: tabular-nums; color: var(--wt-text); }
+table.dataframe tbody tr:hover { background: rgba(56,189,248,.04); }
+table.dataframe tbody tr:last-child td { border-bottom: none; }
+
+[data-testid="stTable"] { border: 1px solid var(--wt-border); border-radius: 10px; overflow: hidden; }
+
+/* ── Widgets ─────────────────────────────────────────────────── */
+[data-testid="stSelectbox"] [data-baseweb="select"] > div,
+[data-testid="stSelectbox"] > div > div {
+  background: var(--wt-surface) !important;
+  border: 1px solid var(--wt-border) !important;
+  border-radius: 8px !important; color: var(--wt-text) !important; }
+.stButton > button { background: var(--wt-surface); border: 1px solid var(--wt-border);
+  color: var(--wt-text); border-radius: 8px; font-weight: 600; transition: all .15s; }
+.stButton > button:hover { border-color: var(--wt-gold); color: var(--wt-gold); }
+
+[data-testid="stCaptionContainer"] p { color: var(--wt-muted); font-size: .78rem; }
+[data-testid="stAlert"] { background: var(--wt-surface2); border: 1px solid var(--wt-border);
+  border-radius: 10px; color: var(--wt-muted); }
+[data-testid="stSubheader"] { font-size: 1.05rem; font-weight: 700; letter-spacing: -.01em;
+  margin-top: 22px; }
+h2[data-testid="stSubheader"] { color: var(--wt-text); }
+
+/* section labels */
+.sec-label { font-size: 11px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--wt-gold); font-weight: 700; margin: 20px 0 8px; }
+
+/* scrollbars */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #243244; border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* charts blend into the dark surface */
+[data-testid="stVegaLiteChart"], [data-testid="stLineChart"], [data-testid="stAreaChart"], [data-testid="stBarChart"] {
+  border: 1px solid var(--wt-border); border-radius: 10px; padding: 6px; background: var(--wt-surface); }
 </style>
 """, unsafe_allow_html=True)
 
@@ -282,6 +449,138 @@ def _runs_count() -> int:
 
 
 # ═══════════════════════════════════════════════════════════════════
+#  Presentation helpers
+# ═══════════════════════════════════════════════════════════════════
+def _page_header(emoji: str, title: str, sub: str = "") -> None:
+    st.markdown(
+        f'<div class="kicker">WHALETRAIL · {emoji}</div>'
+        f'<div class="page-title">{title}</div>'
+        f'<div class="page-sub">{sub}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _card(label: str, value: str, delta: str = "", delta_color: str = "", sub: str = "", accent: str = "#e6b450") -> str:
+    delta_html = f'<div class="m-delta" style="color:{delta_color}">{delta}</div>' if delta else ""
+    sub_html = f'<div class="m-sub">{sub}</div>' if sub else ""
+    return (f'<div class="m-card" style="--m-accent:{accent}">'
+            f'<div class="m-label">{label}</div>'
+            f'<div class="m-value">{value}</div>{delta_html}{sub_html}</div>')
+
+
+def _card_row(cards: list[dict], cols: int = 4) -> None:
+    """cards: list of dicts with keys label/value/delta/delta_color/sub/accent."""
+    columns = st.columns(cols)
+    for i, col in enumerate(columns):
+        if i < len(cards):
+            col.markdown(_card(**cards[i]), unsafe_allow_html=True)
+
+
+def _num_color(v: float) -> str:
+    return "#4ade80" if v > 0 else ("#f87171" if v < 0 else "#8b98a9")
+
+
+def _staleness_color(text: str) -> str:
+    if "天" in text:
+        return "#f87171"
+    if "小时" in text:
+        return "#fbbf24"
+    return "#4ade80"
+
+
+def _pill(text: str, tone: str = "mut") -> str:
+    return f'<span class="pill pill-{tone}">{text}</span>'
+
+
+def _show(obj, **kwargs) -> None:
+    """st.dataframe wrapper: hide index, stretch width, keep Styler colors."""
+    kwargs.setdefault("width", "stretch")
+    kwargs.setdefault("hide_index", True)
+    st.dataframe(obj, **kwargs)
+
+
+def _alt_dark(chart: alt.Chart) -> alt.Chart:
+    return (chart
+            .configure(background="#111826")
+            .configure_view(strokeOpacity=0)
+            .configure_axis(
+                gridColor="#1e2a3a", domainColor="#243244",
+                labelColor="#8b98a9", titleColor="#8b98a9", tickColor="#243244",
+            )
+            .configure_legend(labelColor="#8b98a9", titleColor="#8b98a9"))
+
+
+def _style_base(s: Any) -> Any:
+    """Common pandas Styler base for dark theme (works on pandas >= 2.1)."""
+    return (s
+            .set_properties(**{
+                "color": "#e6edf3", "font-family": "var(--wt-mono)",
+                "font-size": "12.5px", "padding": "6px 12px",
+                "border-bottom": "1px solid #182231", "text-align": "right",
+            })
+            .set_table_styles([{
+                "selector": "th", "props": [
+                    ("background-color", "#0d1320"), ("color", "#8b98a9"),
+                    ("font-size", "10.5px"), ("text-transform", "uppercase"),
+                    ("letter-spacing", ".1em"), ("padding", "8px 12px"),
+                    ("border-bottom", "1px solid #1e2a3a")],
+            }]))
+
+
+def _num_style(v, fmt: str = "") -> str:
+    try:
+        if pd.isna(v):
+            return ""
+        return f"color:{_num_color(float(v))};font-weight:600"
+    except (TypeError, ValueError):
+        return ""
+
+
+def _rsi_style(v) -> str:
+    if v is None or pd.isna(v):
+        return ""
+    if v >= 70:
+        return "color:#fbbf24;font-weight:700;background:rgba(251,191,36,.08)"
+    if v <= 30:
+        return "color:#38bdf8;font-weight:700;background:rgba(56,189,248,.08)"
+    return ""
+
+
+def _side_style(v) -> str:
+    s = str(v).upper()
+    if s == "BUY":
+        return "color:#4ade80;font-weight:700"
+    if s == "SELL":
+        return "color:#f87171;font-weight:700"
+    return ""
+
+
+def _ticker_tape(snaps: list[dict]) -> None:
+    if not snaps:
+        return
+    items = []
+    for r in snaps:
+        name = r.get("local_name") or r.get("tv_symbol") or ""
+        close = r.get("close")
+        chg = r.get("change_percent")
+        if close is None:
+            continue
+        cls = "tape-up" if (chg or 0) >= 0 else "tape-down"
+        arrow = "▲" if (chg or 0) >= 0 else "▼"
+        items.append(
+            f'<span class="tape-item"><b>{name}</b> {close:,.2f} '
+            f'<span class="{cls}">{arrow}{chg:+.2f}%</span></span>'
+        )
+    if not items:
+        return
+    inner = "".join(items)
+    st.markdown(
+        f'<div class="tape"><div class="tape-inner">{inner}{inner}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════
 #  Page: 总览
 # ═══════════════════════════════════════════════════════════════════
 @_frag(run_every=60)
@@ -292,48 +591,91 @@ def _overview_panel() -> None:
     live = load_live_state()
     snaps = load_quote_snapshots()
 
-    c1, c2, c3, c4 = st.columns(4)
+    _ticker_tape(snaps)
+
+    cards = []
     if latest:
         enriched, metrics, _ = _backtest_metrics(latest)
         ret = metrics.get("total_return", 0.0)
         dd = metrics.get("max_drawdown", 0.0)
-        c1.metric("最新回测收益", f"{ret:+.2f}%", delta=f"最大回撤 {dd:.2f}%")
-        c2.metric("策略 · 标的", f"{latest.get('strategy', '?')} · {latest.get('symbol', '?')}",
-                  f"交易 {len(enriched)} 次 · 结束 {latest.get('end', '?')}")
+        cards.append({"label": "最新回测收益", "value": f"{ret:+.2f}%",
+                      "delta": f"最大回撤 {dd:.2f}%", "delta_color": _num_color(ret),
+                      "sub": f"{latest.get('strategy','?')} · {latest.get('symbol','?')}",
+                      "accent": "#e6b450"})
+        cards.append({"label": "回测交易", "value": f"{len(enriched)} 次",
+                      "delta": f"结束 {latest.get('end','?')}",
+                      "delta_color": "#8b98a9",
+                      "sub": f"Sharpe {metrics.get('sharpe_ratio',0):.2f} · 胜率 {metrics.get('win_rate',0)*100:.0f}%",
+                      "accent": "#38bdf8"})
     else:
-        c1.metric("最新回测收益", "—")
-        c2.metric("策略 · 标的", "—", "运行 scripts/run-backtest.py")
+        cards.append({"label": "最新回测收益", "value": "—",
+                      "delta": "运行 scripts/run-backtest.py", "delta_color": "#8b98a9",
+                      "sub": "", "accent": "#e6b450"})
 
     if sent:
         gsi = sent.get("gold_sentiment_index", 0.0)
         bull, bear = sent.get("bullish_count", 0), sent.get("bearish_count", 0)
-        c3.metric("GSI 情绪指数", f"{gsi:+.3f}", f"📈 {bull} · 📉 {bear}")
+        gsi_tone = "看多" if gsi > 0.15 else ("看空" if gsi < -0.15 else "中性")
+        cards.append({"label": "GSI 情绪指数", "value": f"{gsi:+.3f}",
+                      "delta": f"{gsi_tone} · 📈{bull} 📉{bear}",
+                      "delta_color": _num_color(gsi),
+                      "sub": f"{sent.get('date','?')} 扫描 {sent.get('total_scored',0)} 条",
+                      "accent": "#a78bfa"})
     else:
-        c3.metric("GSI 情绪指数", "—", "等待情绪扫描")
+        cards.append({"label": "GSI 情绪指数", "value": "—",
+                      "delta": "等待情绪扫描", "delta_color": "#8b98a9",
+                      "sub": "", "accent": "#a78bfa"})
 
     if live:
         snap = live.get("last_snapshot") or {}
         gld = snap.get("GLD", {})
+        spy = snap.get("SPY", {})
         price = gld.get("price")
-        c4.metric("GLD 实时价格", f"${price:,.2f}" if price else "—",
-                  _staleness(gld.get("ts", "")) if gld else None)
+        stal = _staleness(gld.get("ts", "")) if gld else ""
+        cards.append({"label": "GLD 实时价格", "value": f"${price:,.2f}" if price else "—",
+                      "delta": stal, "delta_color": _staleness_color(stal) if stal else "#8b98a9",
+                      "sub": f"SPY ${spy.get('price', 0):,.2f}" if spy.get("price") else "",
+                      "accent": "#e6b450"})
     else:
-        c4.metric("GLD 实时价格", "—", "等待 paper-live")
+        cards.append({"label": "GLD 实时价格", "value": "—",
+                      "delta": "等待 paper-live", "delta_color": "#8b98a9",
+                      "sub": "", "accent": "#e6b450"})
 
-    c5, c6, c7, c8 = st.columns(4)
+    _card_row(cards[:4])
+
     signals = _parse_signals((live or {}).get("last_signals") or {})
     today = date.today().isoformat()
-    c5.metric("今日策略信号", sum(1 for s in signals if s["date"] == today), f"累计 {len(signals)} 条")
+    today_n = sum(1 for s in signals if s["date"] == today)
     rsi_alerts = [s for s in snaps if (s.get("rsi") is not None and (s["rsi"] >= 70 or s["rsi"] <= 30))]
-    c6.metric("Watchlist 覆盖", len(snaps), f"RSI 极端 {len(rsi_alerts)} 只")
     services = _service_checks()
-    c7.metric("服务健康", f"{sum(1 for r in services if r['状态'] == '✅')}/{len(services)}")
+    up_n = sum(1 for r in services if r["状态"] == "✅")
     runs = _runs_count()
-    c8.metric("SQLite 回测记录", runs if runs >= 0 else "?")
+
+    _card_row([
+        {"label": "今日策略信号", "value": today_n, "delta": f"累计 {len(signals)} 条",
+         "delta_color": "#4ade80" if today_n else "#8b98a9", "sub": "", "accent": "#38bdf8"},
+        {"label": "Watchlist 覆盖", "value": len(snaps), "delta": f"RSI 极端 {len(rsi_alerts)} 只",
+         "delta_color": "#fbbf24" if rsi_alerts else "#8b98a9", "sub": "tvscreener 快照", "accent": "#e6b450"},
+        {"label": "服务健康", "value": f"{up_n}/{len(services)}", "delta": "OpenClaw · Ollama · Dashboard",
+         "delta_color": "#4ade80" if up_n == len(services) else "#fbbf24", "sub": "", "accent": "#4ade80"},
+        {"label": "SQLite 回测记录", "value": runs if runs >= 0 else "?",
+         "delta": "runs 表持久化", "delta_color": "#8b98a9", "sub": "", "accent": "#38bdf8"},
+    ])
+
+    if signals:
+        st.markdown('<div class="sec-label">最近信号</div>', unsafe_allow_html=True)
+        rows_html = []
+        for s in sorted(signals, key=lambda x: x["date"], reverse=True)[:8]:
+            tone = "buy" if str(s["side"]).upper() == "BUY" else "sell"
+            rows_html.append(
+                f'<div class="svc"><span class="svc-name">{s["date"]} · {s["symbol"]} · {s["strategy"]}</span>'
+                f'{_pill(s["side"], tone)}</div>'
+            )
+        st.markdown("".join(rows_html), unsafe_allow_html=True)
 
 
 def page_overview() -> None:
-    st.title("📊 总览")
+    _page_header("📊", "总览", "黄金主策略 · 美股对冲 · A股跟庄 · 情绪 — 单屏总览")
     _overview_panel()
     st.caption("总览每 60s 自动刷新 · 数据源: results/*.json + results/whaletrail.db")
 
@@ -342,7 +684,7 @@ def page_overview() -> None:
 #  Page: 回测结果
 # ═══════════════════════════════════════════════════════════════════
 def page_backtest() -> None:
-    st.title("📈 回测结果")
+    _page_header("📈", "回测结果", "策略表现 · 权益曲线 · 交易明细 · 跨回测对比")
     files = list_backtest_files()
     if not files:
         st.info("还没有回测结果。运行 scripts/run-backtest.py 生成。")
@@ -352,19 +694,34 @@ def page_backtest() -> None:
     enriched, metrics, initial_cash = _backtest_metrics(data)
 
     fe = float(data.get("final_equity", 0) or 0)
+    ret = metrics.get("total_return", 0.0)
+    dd = metrics.get("max_drawdown", 0.0)
     trades_n = len(enriched)
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("最终权益", f"${fe:,.0f}", f"初始 ${initial_cash:,.0f}")
-    c2.metric("总收益率", f"{metrics.get('total_return', 0):+.2f}%")
-    c3.metric("年化收益率", f"{metrics.get('annual_return', 0):+.2f}%")
-    c4.metric("最大回撤", f"{metrics.get('max_drawdown', 0):.2f}%")
-    c5, c6, c7, c8 = st.columns(4)
-    c5.metric("Sharpe", f"{metrics.get('sharpe_ratio', 0):.2f}")
-    c6.metric("胜率", f"{metrics.get('win_rate', 0) * 100:.1f}%")
-    c7.metric("盈亏比", f"{metrics.get('profit_factor', 0):.2f}")
-    c8.metric("交易次数", trades_n, f"手续费 ${data.get('total_commission', 0):.2f}")
+
+    _card_row([
+        {"label": "最终权益", "value": f"${fe:,.0f}",
+         "delta": f"初始 ${initial_cash:,.0f}", "delta_color": "#8b98a9",
+         "sub": f"手续费 ${data.get('total_commission', 0):.2f}", "accent": "#e6b450"},
+        {"label": "总收益率", "value": f"{ret:+.2f}%", "delta": "策略累计",
+         "delta_color": _num_color(ret), "sub": "", "accent": _num_color(ret)},
+        {"label": "年化收益率", "value": f"{metrics.get('annual_return', 0):+.2f}%",
+         "delta": "252 交易日基准", "delta_color": _num_color(metrics.get("annual_return", 0)),
+         "sub": "", "accent": "#38bdf8"},
+        {"label": "最大回撤", "value": f"{dd:.2f}%", "delta": "峰值回撤",
+         "delta_color": "#f87171", "sub": "", "accent": "#f87171"},
+    ])
+    _card_row([
+        {"label": "Sharpe", "value": f"{metrics.get('sharpe_ratio', 0):.2f}",
+         "delta": "年化 · RF 2%", "delta_color": "#8b98a9", "sub": "", "accent": "#a78bfa"},
+        {"label": "胜率", "value": f"{metrics.get('win_rate', 0) * 100:.1f}%",
+         "delta": "平仓交易口径", "delta_color": "#8b98a9", "sub": "", "accent": "#a78bfa"},
+        {"label": "盈亏比", "value": f"{metrics.get('profit_factor', 0):.2f}",
+         "delta": "毛利 / 毛损", "delta_color": "#8b98a9", "sub": "", "accent": "#a78bfa"},
+        {"label": "波动率", "value": f"{metrics.get('volatility', 0):.2f}%",
+         "delta": "年化日收益 σ", "delta_color": "#8b98a9", "sub": "", "accent": "#a78bfa"},
+    ])
     st.caption(f"策略: **{data.get('strategy', '?')}** · 标的: {data.get('symbol', '?')} · "
-               f"{data.get('start', '?')} → {data.get('end', '?')}")
+               f"{data.get('start', '?')} → {data.get('end', '?')} · 交易 {trades_n} 次")
 
     equity = data.get("equity_curve", [])
     if equity:
@@ -374,29 +731,42 @@ def page_backtest() -> None:
         bench = _benchmark_series(data, initial_cash)
         if bench is not None:
             df_eq = df_eq.join(bench, how="left")
-        st.subheader("权益曲线")
-        st.line_chart(df_eq, height=320)
+        st.markdown('<div class="sec-label">权益曲线</div>', unsafe_allow_html=True)
+        eq = df_eq.reset_index()
+        value_cols = [c for c in ("equity", "买入持有") if c in eq.columns]
+        long = eq.melt(id_vars=["date"], value_vars=value_cols, var_name="系列", value_name="权益")
+        eq_ch = alt.Chart(long.dropna(subset=["权益"])).mark_line(strokeWidth=2).encode(
+            x=alt.X("date:T", title=None),
+            y=alt.Y("权益:Q", title=None),
+            color=alt.Color("系列:N",
+                            scale=alt.Scale(domain=["equity", "买入持有"], range=["#e6b450", "#38bdf8"]),
+                            legend=alt.Legend(title=None, orient="top")),
+        ).properties(height=320, width=980)
+        st.altair_chart(_alt_dark(eq_ch), width="stretch")
         if bench is not None:
-            st.caption("橙色线为买入持有对照（数据来自本地 data_cache 缓存）")
+            st.caption("蓝色线为买入持有对照（数据来自本地 data_cache 缓存）")
 
-        st.subheader("回撤")
-        dd = (df_eq["equity"] / df_eq["equity"].cummax() - 1) * 100
-        st.area_chart(pd.DataFrame({"回撤%": dd}), height=220, color="#dc2626")
+        st.markdown('<div class="sec-label">回撤</div>', unsafe_allow_html=True)
+        dd_df = df_eq.reset_index()
+        dd_df["回撤%"] = (df_eq["equity"] / df_eq["equity"].cummax() - 1).to_numpy() * 100
+        dd_ch = alt.Chart(dd_df).mark_area(color="#f87171", opacity=0.45).encode(
+            x=alt.X("date:T", title=None),
+            y=alt.Y("回撤%:Q", title=None),
+        ).properties(height=220, width=980)
+        st.altair_chart(_alt_dark(dd_ch), width="stretch")
 
     if enriched:
-        st.subheader("交易记录")
+        st.markdown('<div class="sec-label">交易记录</div>', unsafe_allow_html=True)
         df_t = pd.DataFrame(enriched)
         if "date" in df_t.columns:
             df_t["date"] = pd.to_datetime(df_t["date"]).dt.date
         cols = [c for c in ("date", "symbol", "side", "quantity", "price", "commission", "pnl") if c in df_t.columns]
-        st.dataframe(
-            df_t[cols], width="stretch", hide_index=True,
-            column_config={
-                "price": st.column_config.NumberColumn("价格", format="$%.2f"),
-                "commission": st.column_config.NumberColumn("手续费", format="$%.2f"),
-                "pnl": st.column_config.NumberColumn("已实现盈亏", format="$%.2f"),
-            },
-        )
+        styled = (_style_base(df_t[cols].style.hide(axis="index"))
+                  .format({"quantity": "{:,.2f}", "price": "${:,.2f}",
+                           "commission": "${:,.2f}", "pnl": "${:,.2f}"}, na_rep="—")
+                  .map(_side_style, subset=["side"])
+                  .map(lambda v: _num_style(v, ""), subset=["pnl"]))
+        _show(styled, width="stretch")
         sells = [t for t in enriched if str(t.get("side", "")).lower() == "sell"]
         wins = sum(1 for t in sells if (t.get("pnl") or 0) > 0)
         losses = sum(1 for t in sells if (t.get("pnl") or 0) < 0)
@@ -404,7 +774,7 @@ def page_backtest() -> None:
 
     # ── Cross-run comparison ─────────────────────────────────────────
     if len(files) > 1:
-        st.subheader("跨回测对比")
+        st.markdown('<div class="sec-label">跨回测对比</div>', unsafe_allow_html=True)
         rows = []
         for name in files:
             d = load_backtest(name)
@@ -421,7 +791,12 @@ def page_backtest() -> None:
                 "Sharpe": m.get("sharpe_ratio") if m else None,
             })
         df_cmp = pd.DataFrame(rows)
-        st.dataframe(df_cmp, width="stretch", hide_index=True)
+        styled_cmp = (_style_base(df_cmp.style.hide(axis="index"))
+                      .format({"最终权益": "${:,.0f}", "最大回撤%": "{:.2f}%",
+                               "Sharpe": "{:.2f}", "交易次数": "{:.0f}"}, na_rep="—")
+                      .map(lambda v: _num_style(v, ""), subset=["总收益%"])
+                      .map(lambda v: _num_style(v, ""), subset=["最大回撤%"]))
+        _show(styled_cmp, width="stretch")
         cmp_chart = df_cmp.head(10).copy()
         cmp_chart["label"] = cmp_chart["策略"] + " · " + cmp_chart["标的"] + " · " + cmp_chart["结束日"].astype(str)
         st.bar_chart(cmp_chart.set_index("label")["总收益%"], height=240)
@@ -438,48 +813,57 @@ def _live_panel() -> None:
         return
 
     snap = live.get("last_snapshot") or {}
-    cols = st.columns(max(1, len(snap)))
-    for col, (sym, info) in zip(cols, snap.items()):
-        price = info.get("price")
-        col.metric(sym, f"${price:,.2f}" if price else "?", _staleness(info.get("ts", "")))
+    if snap:
+        cards = []
+        for sym, info in snap.items():
+            price = info.get("price")
+            stal = _staleness(info.get("ts", ""))
+            accent = "#e6b450" if sym == "GLD" else "#38bdf8"
+            cards.append({"label": f"{sym} 实时价格",
+                          "value": f"${price:,.2f}" if price else "—",
+                          "delta": stal, "delta_color": _staleness_color(stal) if stal else "#8b98a9",
+                          "sub": info.get("ts", ""), "accent": accent})
+        _card_row(cards, cols=max(1, len(cards)))
 
     signals = _parse_signals(live.get("last_signals") or {})
     if signals:
         df_s = pd.DataFrame(signals)
         today = date.today().isoformat()
-        df_s["今日"] = df_s["date"] == today
-        df_s["方向"] = df_s["side"].map(SIDE_EMOJI).fillna(df_s["side"])
-        st.subheader(f"策略信号 · 共 {len(df_s)} 条 · 今日 {int(df_s['今日'].sum())} 条")
-        st.dataframe(
-            df_s[["symbol", "strategy", "方向", "date", "今日"]],
-            width="stretch", hide_index=True,
-            column_config={"今日": st.column_config.CheckboxColumn("今日")},
-        )
+        today_n = int((df_s["date"] == today).sum())
+        df_s["标记"] = df_s["date"].map(lambda d: "今日" if d == today else "—")
+        df_s = df_s.rename(columns={"symbol": "标的", "strategy": "策略", "side": "方向", "date": "日期"})
+        st.markdown(
+            f'<div class="sec-label">策略信号 · 共 {len(df_s)} 条 · 今日 {today_n} 条</div>',
+            unsafe_allow_html=True)
+        styled_s = (_style_base(df_s[["标的", "策略", "方向", "日期", "标记"]].style.hide(axis="index"))
+                    .map(_side_style, subset=["方向"])
+                    .map(lambda v: "color:#e6b450;font-weight:700" if v == "今日" else "", subset=["标记"]))
+        _show(styled_s)
     else:
         st.info("暂无信号记录")
 
     positions = live.get("positions") or {}
     if positions:
-        st.subheader("当前持仓")
+        st.markdown('<div class="sec-label">当前持仓</div>', unsafe_allow_html=True)
         if isinstance(positions, dict):
-            st.dataframe(pd.DataFrame(positions).T, width="stretch")
+            _show(_style_base(pd.DataFrame(positions).T.style.hide(axis="index")), width="stretch")
         else:
-            st.dataframe(pd.DataFrame(positions), width="stretch")
+            _show(_style_base(pd.DataFrame(positions).style.hide(axis="index")), width="stretch")
     else:
         st.caption("当前无持仓")
 
 
 def page_live() -> None:
-    st.title("🔴 实时信号")
+    _page_header("🔴", "实时信号", "paper-live 多策略扫描 · 每 60s 自动刷新")
     _live_panel()
-    st.caption("状态文件: results/paper_live_state.json · 信号面板每 60s 自动刷新")
+    st.caption("状态文件: results/paper_live_state.json")
 
 
 # ═══════════════════════════════════════════════════════════════════
 #  Page: 情绪监控
 # ═══════════════════════════════════════════════════════════════════
 def page_sentiment() -> None:
-    st.title("🐋 Gold Sentiment Index")
+    _page_header("🐋", "Gold Sentiment Index", "18 位黄金 KOL 推文打分 · Ollama 标注")
     latest = load_sentiment_latest()
     if not latest:
         st.info("等待首次情绪扫描（cron: whaletrail-sentiment 每日 09:00）")
@@ -492,19 +876,24 @@ def page_sentiment() -> None:
     total = latest.get("total_scored", 0)
     entries = latest.get("entries", [])
 
-    tag = "🟢 看多" if gsi > 0.15 else ("🔴 看空" if gsi < -0.15 else "🟡 中性")
-    c1, c2, c3, c4, c5 = st.columns([2, 1, 1, 1, 2])
-    c1.metric("GSI 情绪指数", f"{gsi:+.3f}", tag)
-    c2.metric("📈 看多", bullish)
-    c3.metric("📉 看空", bearish)
-    c4.metric("➖ 中性", neutral)
-    c5.metric("📊 扫描", f"{total} 条推文")
-    kols = latest.get("scanned_kols") or len({e.get("account") for e in entries})
-    st.caption(f"数据日期: **{latest.get('date', '?')}** · 覆盖 KOL: {kols} 位 · 每日 09:00 更新")
+    gsi_tone = "🟢 看多" if gsi > 0.15 else ("🔴 看空" if gsi < -0.15 else "🟡 中性")
+    _card_row([
+        {"label": "GSI 情绪指数", "value": f"{gsi:+.3f}", "delta": gsi_tone,
+         "delta_color": _num_color(gsi),
+         "sub": f"数据日期 {latest.get('date', '?')}", "accent": "#a78bfa"},
+        {"label": "📈 看多", "value": bullish, "delta": "bullish",
+         "delta_color": "#4ade80", "sub": "", "accent": "#4ade80"},
+        {"label": "📉 看空", "value": bearish, "delta": "bearish",
+         "delta_color": "#f87171", "sub": "", "accent": "#f87171"},
+        {"label": "📊 扫描", "value": f"{total} 条", "delta": "今日推文",
+         "delta_color": "#8b98a9",
+         "sub": f"覆盖 KOL: {latest.get('scanned_kols') or len({e.get('account') for e in entries})} 位",
+         "accent": "#38bdf8"},
+    ])
 
     history = load_sentiment_history()
     if history:
-        st.subheader("📊 GSI 历史趋势")
+        st.markdown('<div class="sec-label">GSI 历史趋势</div>', unsafe_allow_html=True)
         df_h = pd.DataFrame(history).sort_values("date")
         df_h["date"] = pd.to_datetime(df_h["date"])
         df_h = df_h.set_index("date")
@@ -514,34 +903,38 @@ def page_sentiment() -> None:
         source["Bullish"] = source["bullish_count"]
         source["Bearish"] = source["bearish_count"]
 
-        bar = alt.Chart(source).mark_bar(opacity=0.3).encode(
-            x="date:T", y="Bullish:Q", color=alt.value("#16a34a"),
+        bar = alt.Chart(source).mark_bar(opacity=0.25).encode(
+            x="date:T", y="Bullish:Q", color=alt.value("#4ade80"),
         ).properties(height=250)
-        bar2 = alt.Chart(source).mark_bar(opacity=0.3).encode(
+        bar2 = alt.Chart(source).mark_bar(opacity=0.25).encode(
             x="date:T", y=alt.Y("Bearish:Q", scale=alt.Scale(domain=[0, source["Bearish"].max() + 1])),
-            color=alt.value("#dc2626"),
+            color=alt.value("#f87171"),
         )
-        line = alt.Chart(source).mark_line(point=True, color="#3b82f6", strokeWidth=3).encode(
+        line = alt.Chart(source).mark_line(point=True, color="#e6b450", strokeWidth=3).encode(
             x="date:T",
             y=alt.Y("GSI:Q", scale=alt.Scale(domain=[-1, 1])),
             tooltip=["date", "GSI", "Bullish", "Bearish"],
         ).properties(height=250)
 
-        st.altair_chart((bar + bar2 + line).resolve_scale(y="independent"), width="stretch")
+        chart = _alt_dark((bar + bar2 + line).resolve_scale(y="independent").properties(height=260, width=980))
+        st.altair_chart(chart, width="stretch")
 
         st.caption("每日汇总")
         tbl = source[["date", "GSI", "Bullish", "Bearish", "neutral_count"]].rename(
             columns={"neutral_count": "Neutral"}
         ).tail(10)
-        st.dataframe(tbl.set_index("date"), width="stretch")
+        _show(_style_base(tbl.set_index("date").style)
+                     .format({"GSI": "{:+.3f}", "Bullish": "{:.0f}", "Bearish": "{:.0f}", "Neutral": "{:.0f}"})
+                     .map(lambda v: _num_style(v, ""), subset=["GSI"]), width="stretch")
 
     if entries:
         col_left, col_right = st.columns([1, 2])
         with col_left:
-            st.subheader("情绪分布")
+            st.markdown('<div class="sec-label">情绪分布</div>', unsafe_allow_html=True)
             df_dist = pd.DataFrame({"方向": ["📈 看多", "📉 看空", "➖ 中性"], "数量": [bullish, bearish, neutral]})
             st.bar_chart(df_dist.set_index("方向"), width="stretch")
 
+            st.markdown('<div class="sec-label">KOL 分布</div>', unsafe_allow_html=True)
             kol_rows = []
             for acc, grp in pd.DataFrame(entries).groupby("account"):
                 kol_rows.append({
@@ -551,21 +944,24 @@ def page_sentiment() -> None:
                     "中性": int((grp["score"] == "neutral").sum()),
                     "均置信": round(float(grp["confidence"].mean()), 1),
                 })
-            st.caption(f"覆盖 KOL: {len(kol_rows)} 位")
-            st.dataframe(pd.DataFrame(kol_rows), width="stretch", hide_index=True)
+            df_kol = pd.DataFrame(kol_rows)
+            _show(_style_base(df_kol.style.hide(axis="index"))
+                         .format({"看多": "{:.0f}", "看空": "{:.0f}", "中性": "{:.0f}", "均置信": "{:.1f}"})
+                         .map(lambda v: "color:#4ade80;font-weight:600" if (isinstance(v, int) and v > 0) else "", subset=["看多"])
+                         .map(lambda v: "color:#f87171;font-weight:600" if (isinstance(v, int) and v > 0) else "", subset=["看空"]),
+                         width="stretch")
 
             kw = Counter(e.get("keyword", "") for e in entries)
-            st.caption("关键词分布")
-            st.dataframe(
-                pd.DataFrame(kw.items(), columns=["关键词", "数量"]).sort_values("数量", ascending=False),
-                width="stretch", hide_index=True,
-            )
+            st.markdown('<div class="sec-label">关键词分布</div>', unsafe_allow_html=True)
+            df_kw = pd.DataFrame(kw.items(), columns=["关键词", "数量"]).sort_values("数量", ascending=False)
+            _show(_style_base(df_kw.style.hide(axis="index"))
+                         .format({"数量": "{:.0f}"}), width="stretch")
 
         with col_right:
-            st.subheader("📋 推文评分明细")
+            st.markdown('<div class="sec-label">推文评分明细</div>', unsafe_allow_html=True)
             for e in entries:
                 score = e.get("score", "neutral")
-                color = SCORE_COLORS.get(score, "#6b7280")
+                color = SCORE_COLORS.get(score, "#8b98a9")
                 emoji = SCORE_EMOJI.get(score, "")
                 conf = "⭐" * e.get("confidence", 1) + "☆" * (5 - e.get("confidence", 1))
                 st.markdown(f"""
@@ -581,58 +977,89 @@ def page_sentiment() -> None:
 #  Page: Watchlist 跟庄
 # ═══════════════════════════════════════════════════════════════════
 def page_watchlist() -> None:
-    st.title("👀 Watchlist 跟庄")
+    _page_header("👀", "Watchlist 跟庄", "tvscreener 快照 · 黄金 / 期货 / 指数 / A股")
     ts = latest_quote_ts()
     snapshots = load_quote_snapshots()
     if not snapshots:
         st.info("还没有 watchlist 快照。运行 scripts/fetch-tvscreener-watchlist.py --save-db")
         return
     if ts:
-        st.caption(f"最新快照: **{ts}**（{_staleness(ts)}）· 来源 tvscreener")
+        stal = _staleness(ts)
+        st.markdown(
+            f'<div class="svc"><span class="svc-name">最新快照</span>'
+            f'<span>{ts} · {_pill(stal, "ok" if "分钟" in stal or "s 前" in stal else "warn")}</span></div>',
+            unsafe_allow_html=True)
 
     df = pd.DataFrame(snapshots)
     df["信号"] = df.apply(lambda r: _signal_tags(r), axis=1)
     if {"close", "sma200"}.issubset(df.columns):
         df["SMA200 距离%"] = ((df["close"] - df["sma200"]) / df["sma200"].replace(0, float("nan")) * 100).round(2)
+    rename = {
+        "tv_symbol": "代码", "local_name": "名称", "asset_class": "类型",
+        "close": "收盘", "change_percent": "涨跌%", "volume": "成交量",
+        "rsi": "RSI", "sma20": "SMA20", "sma50": "SMA50", "sma200": "SMA200",
+        "recommend_all": "评分",
+    }
     cols = [c for c in (
         "tv_symbol", "local_name", "asset_class", "close", "change_percent", "volume",
         "rsi", "sma20", "sma50", "sma200", "SMA200 距离%", "recommend_all", "信号",
     ) if c in df.columns]
-    st.dataframe(
-        df[cols], width="stretch", hide_index=True,
-        column_config={
-            "close": st.column_config.NumberColumn("收盘", format="$%.2f"),
-            "change_percent": st.column_config.NumberColumn("涨跌%", format="%.2f%%"),
-            "volume": st.column_config.NumberColumn("成交量", format="%,d"),
-            "rsi": st.column_config.NumberColumn("RSI", format="%.1f"),
-            "sma20": st.column_config.NumberColumn("SMA20", format="$%.2f"),
-            "sma50": st.column_config.NumberColumn("SMA50", format="$%.2f"),
-            "sma200": st.column_config.NumberColumn("SMA200", format="$%.2f"),
-            "SMA200 距离%": st.column_config.NumberColumn("SMA200 距离%", format="%.2f%%"),
-            "recommend_all": st.column_config.NumberColumn("评分", format="%.2f"),
-        },
-    )
+    view = df[cols].rename(columns=rename)
 
-    st.subheader("涨跌幅")
+    fmt = {k: v for k, v in {
+        "收盘": "{:,.2f}", "涨跌%": "{:+.2f}%", "成交量": "{:,.0f}",
+        "RSI": "{:.1f}", "SMA20": "{:,.2f}", "SMA50": "{:,.2f}", "SMA200": "{:,.2f}",
+        "SMA200 距离%": "{:+.2f}%", "评分": "{:+.2f}",
+    }.items() if k in view.columns}
+    styled = _style_base(view.style.hide(axis="index")).format(fmt, na_rep="—")
+    if "涨跌%" in view.columns:
+        styled = styled.map(lambda v: _num_style(v, ""), subset=["涨跌%"])
+    if "SMA200 距离%" in view.columns:
+        styled = styled.map(lambda v: _num_style(v, ""), subset=["SMA200 距离%"])
+    if "RSI" in view.columns:
+        styled = styled.map(_rsi_style, subset=["RSI"])
+    if "评分" in view.columns:
+        styled = styled.map(
+            lambda v: "color:#fbbf24;font-weight:600" if (isinstance(v, (int, float)) and v >= 0.5) else
+                      ("color:#f87171;font-weight:600" if (isinstance(v, (int, float)) and v <= -0.3) else ""),
+            subset=["评分"])
+    _show(styled)
+
+    st.markdown('<div class="sec-label">涨跌幅</div>', unsafe_allow_html=True)
     df_chg = df.dropna(subset=["change_percent"]).sort_values("change_percent", ascending=False)
     if not df_chg.empty:
         col1, col2 = st.columns(2)
-        top = df_chg.head(3)[["local_name", "tv_symbol", "change_percent"]]
-        bottom = df_chg.tail(3).iloc[::-1][["local_name", "tv_symbol", "change_percent"]]
-        col1.markdown("**涨幅榜**")
-        col1.dataframe(top, width="stretch", hide_index=True)
-        col2.markdown("**跌幅榜**")
-        col2.dataframe(bottom, width="stretch", hide_index=True)
-        chart = df_chg.set_index(df_chg["local_name"].fillna(df_chg["tv_symbol"]))["change_percent"]
-        st.bar_chart(chart, height=240)
+        top = df_chg.head(3)[["local_name", "tv_symbol", "change_percent"]].rename(
+            columns={"local_name": "名称", "tv_symbol": "代码", "change_percent": "涨跌%"})
+        bottom = df_chg.tail(3).iloc[::-1][["local_name", "tv_symbol", "change_percent"]].rename(
+            columns={"local_name": "名称", "tv_symbol": "代码", "change_percent": "涨跌%"})
+        with col1:
+            st.markdown('<div class="sec-label">涨幅榜</div>', unsafe_allow_html=True)
+            _show(_style_base(top.style.hide(axis="index"))
+                  .format({"涨跌%": "{:+.2f}%"})
+                  .map(lambda v: _num_style(v, ""), subset=["涨跌%"]))
+        with col2:
+            st.markdown('<div class="sec-label">跌幅榜</div>', unsafe_allow_html=True)
+            _show(_style_base(bottom.style.hide(axis="index"))
+                  .format({"涨跌%": "{:+.2f}%"})
+                  .map(lambda v: _num_style(v, ""), subset=["涨跌%"]))
+        bars = df_chg.copy()
+        bars["name"] = bars["local_name"].fillna(bars["tv_symbol"])
+        bars["tone"] = bars["change_percent"].map(lambda v: "up" if v >= 0 else "down")
+        ch = alt.Chart(bars).mark_bar().encode(
+            x=alt.X("name:N", sort="-y", title=None),
+            y=alt.Y("change_percent:Q", title="涨跌%"),
+            color=alt.Color("tone:N", scale=alt.Scale(domain=["up", "down"], range=["#4ade80", "#f87171"]), legend=None),
+            tooltip=["name", "change_percent"],
+        ).properties(height=240, width=980)
+        st.altair_chart(_alt_dark(ch), width="stretch")
 
     alerts = df[df["信号"].str.contains("超买|超卖")]
     if not alerts.empty:
-        st.subheader("⚠️ RSI 极端提示")
-        st.dataframe(
-            alerts[["local_name", "tv_symbol", "rsi", "信号"]],
-            width="stretch", hide_index=True,
-        )
+        st.markdown('<div class="sec-label">⚠️ RSI 极端提示</div>', unsafe_allow_html=True)
+        _show(_style_base(alerts[["local_name", "tv_symbol", "rsi", "信号"]].style.hide(axis="index"))
+                     .format({"rsi": "{:.1f}"})
+                     .map(_rsi_style, subset=["rsi"]), width="stretch")
     else:
         st.caption("当前无 RSI 极端（>70 超买 / <30 超卖）标的")
 
@@ -642,10 +1069,19 @@ def page_watchlist() -> None:
 # ═══════════════════════════════════════════════════════════════════
 @_frag(run_every=60)
 def _status_panel() -> None:
-    st.subheader("服务健康")
-    st.table(pd.DataFrame(_service_checks() + _launchd_rows()))
+    st.markdown('<div class="sec-label">服务健康</div>', unsafe_allow_html=True)
+    for r in _service_checks() + _launchd_rows():
+        ok = r["状态"] == "✅"
+        warn = r["状态"] == "⚠️"
+        tone = "ok" if ok else ("warn" if warn else "err")
+        label = "运行中" if ok else ("异常" if warn else "离线")
+        st.markdown(
+            f'<div class="svc"><span class="svc-name">{r["服务"]}</span>'
+            f'<span>{_pill(r["端口"], "mut")} {_pill(label, tone)}</span></div>',
+            unsafe_allow_html=True,
+        )
 
-    st.subheader("数据新鲜度")
+    st.markdown('<div class="sec-label">数据新鲜度</div>', unsafe_allow_html=True)
     fresh = []
     qts = latest_quote_ts()
     fresh.append({"数据": "Watchlist 快照", "时间": qts or "无", "距今": _staleness(qts) if qts else "—"})
@@ -663,12 +1099,15 @@ def _status_panel() -> None:
             "时间": datetime.fromtimestamp(newest_bt.stat().st_mtime).strftime("%Y-%m-%d %H:%M"),
             "距今": _staleness(datetime.fromtimestamp(newest_bt.stat().st_mtime).isoformat()),
         })
-    st.table(pd.DataFrame(fresh))
+    df_fresh = pd.DataFrame(fresh)
+    styled_fresh = (_style_base(df_fresh.style.hide(axis="index"))
+                    .map(lambda v: f"color:{_staleness_color(str(v))};font-weight:600", subset=["距今"]))
+    _show(styled_fresh, width="stretch")
 
     runs = _runs_count()
     st.caption(f"SQLite runs 表: {runs} 条回测记录" if runs >= 0 else "SQLite 不可用")
 
-    st.subheader("📁 results/ 文件")
+    st.markdown('<div class="sec-label">results/ 文件</div>', unsafe_allow_html=True)
     files = sorted(RESULTS_DIR.glob("*"), reverse=True)[:30]
     file_rows = []
     for r in files:
@@ -678,11 +1117,12 @@ def _status_panel() -> None:
                 "大小": f"{r.stat().st_size:,} B",
                 "修改时间": datetime.fromtimestamp(r.stat().st_mtime).strftime("%m-%d %H:%M"),
             })
-    st.dataframe(pd.DataFrame(file_rows), width="stretch", hide_index=True)
+    if file_rows:
+        _show(_style_base(pd.DataFrame(file_rows).style.hide(axis="index")), width="stretch")
 
 
 def page_status() -> None:
-    st.title("🏠 运行状态")
+    _page_header("🏠", "运行状态", "服务 · 数据新鲜度 · 结果文件")
     _status_panel()
     st.caption(f"WhaleTrail · {date.today()} · 面板每 60s 自动刷新")
 
@@ -690,8 +1130,12 @@ def page_status() -> None:
 # ═══════════════════════════════════════════════════════════════════
 #  Route
 # ═══════════════════════════════════════════════════════════════════
-st.sidebar.title("🐋 WhaleTrail")
-st.sidebar.caption(f"Mac mini · {date.today()}")
+st.sidebar.markdown(
+    '<div class="brand"><div class="brand-logo">🐋</div>'
+    '<div><div class="brand-title">WhaleTrail</div>'
+    '<div class="brand-sub">GOLD · PAPER TRADING</div></div></div>',
+    unsafe_allow_html=True,
+)
 PAGES = {
     "📊 总览": page_overview,
     "📈 回测结果": page_backtest,
