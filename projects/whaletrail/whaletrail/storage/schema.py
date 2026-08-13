@@ -60,6 +60,9 @@ CREATE TABLE IF NOT EXISTS quote_snapshots (
     asset_class     TEXT,
     exchange        TEXT,
     close           REAL,
+    open            REAL,
+    high            REAL,
+    low             REAL,
     change_percent  REAL,
     volume          REAL,
     rsi             REAL,
@@ -75,6 +78,15 @@ CREATE TABLE IF NOT EXISTS quote_snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_snapshots_run_id ON portfolio_snapshots(run_id);
 """
+
+
+def _ensure_snapshot_ohlc(conn: sqlite3.Connection) -> None:
+    """Lightweight migration: add open/high/low to pre-existing DBs."""
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(quote_snapshots)")}
+    for col in ("open", "high", "low"):
+        if col not in existing:
+            conn.execute(f"ALTER TABLE quote_snapshots ADD COLUMN {col} REAL")
+    conn.commit()
 
 
 def create_tables(db_path: str | Path) -> sqlite3.Connection:
@@ -96,5 +108,6 @@ def create_tables(db_path: str | Path) -> sqlite3.Connection:
 
     conn = sqlite3.connect(str(db_path))
     conn.executescript(SCHEMA_SQL)
+    _ensure_snapshot_ohlc(conn)
     conn.commit()
     return conn

@@ -23,7 +23,8 @@ yfinance ─► YFinanceSource ─► ParquetCache(data_cache/) ─► Backteste
                                                                ├─ dashboard.py (:8766)
                                                                └─ daily-report.sh ─► analyze.py ─► Telegram
 
-tvscreener ─► TVScreenerSource ─► quote_snapshots ─► watchlist_report.md
+tvscreener ─► TVScreenerSource ─► quote_snapshots ─► build_daily_history ─► ashare-paper.py
+                                          └────────► watchlist_report.md
 ```
 
 ## 数据层组合
@@ -33,10 +34,12 @@ tvscreener ─► TVScreenerSource ─► quote_snapshots ─► watchlist_repor
 | 用途 | 主源 | 说明 |
 |------|------|------|
 | 历史日线（回测） | yfinance + Parquet 缓存 | tvscreener 不提供历史；缓存做覆盖检查 + 头尾补缺口，减少 yfinance 配额 |
-| 实时快照 / watchlist / A股 | tvscreener | `get_quotes`；快照积累进 `quote_snapshots` 表 |
+| 实时快照 / watchlist / A股 | tvscreener | `get_quotes`；快照积累进 `quote_snapshots`，经 `build_daily_history` 生成日线 |
 | paper-live 5m 信号 | yfinance | 实时扫描仍走 yfinance |
 
 入口：`whaletrail/data/layer.py` 的 `DataLayer`。快照源的 yfinance fallback 是待办（需 tv/yahoo 符号映射）。
+
+A 股低频率 paper 入口：`scripts/ashare-paper.py`（SMA 20/50 信号，位置状态存 `results/ashare_paper_state.json`）。
 
 ## 引擎不变量（重要）
 

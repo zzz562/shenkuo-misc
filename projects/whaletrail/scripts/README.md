@@ -9,6 +9,7 @@
 | `dashboard.py` | Streamlit 看板 `:8766`（暗色终端风） | 手动 headless；设计见 `docs/DASHBOARD.md` |
 | `sentiment.py` | X/Twitter KOL 情绪扫描 → Ollama 打分 | cron |
 | `fetch-tvscreener-watchlist.py` | TradingView scanner 快照拉取 | cron / 手动 |
+| `ashare-paper.py` | A股低频率 paper（快照积累→日线→SMA 信号） | cron / 手动 |
 | `watchlist-report.py` | SQLite → Markdown watchlist 报表 | cron / 手动 |
 
 策略注册表见 `whaletrail/strategy/registry.py`。

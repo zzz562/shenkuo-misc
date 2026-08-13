@@ -54,6 +54,7 @@ ssh -L 8766:localhost:8766 -L 18789:localhost:18789 -L 11434:localhost:11434 mac
 | `scripts/paper-live.py` | 实时扫描 + Telegram | Mac mini（launchd） | yfinance、`TG_BOT_TOKEN`、代理 |
 | `scripts/sentiment.py` | X 情绪扫描 | Mac mini（cron） | X token、DeepSeek/Ollama、代理 |
 | `scripts/fetch-tvscreener-watchlist.py` | TradingView watchlist 快照 | Mac mini（cron/手动） | 直连 TV，无需代理 |
+| `scripts/ashare-paper.py` | A股低频率 paper（快照积累→日线→信号） | Mac mini（cron/手动） | venv、tvscreener、SQLite |
 | `scripts/watchlist-report.py` | watchlist Markdown 报表 | 任意（本地读 SQLite） | venv |
 | `scripts/dashboard.py` | Streamlit 看板 | Mac mini（headless） | venv、各服务健康 |
 

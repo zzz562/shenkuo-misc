@@ -46,6 +46,9 @@ class Repository:
                 r.get("yahoo_symbol"),
                 r.get("asset_class"),
                 r.get("exchange"),
+                r.get("open"),
+                r.get("high"),
+                r.get("low"),
                 r.get("close"),
                 r.get("change_percent"),
                 r.get("volume"),
@@ -65,9 +68,9 @@ class Repository:
         cur = self.conn.executemany(
             """INSERT INTO quote_snapshots
                (tv_symbol, local_name, yahoo_symbol, asset_class, exchange,
-                close, change_percent, volume, rsi, sma20, sma50, sma200,
+                open, high, low, close, change_percent, volume, rsi, sma20, sma50, sma200,
                 recommend_all, description, source, endpoint, raw_json, timestamp)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             batch,
         )
         self.conn.commit()
