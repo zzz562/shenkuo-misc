@@ -14,10 +14,21 @@
 
 | 服务 | 主机 | 端口 | MacBook 访问 |
 |------|------|------|--------------|
-| WhaleTrail 看板 | Mac mini | 8766 | `http://localhost:8766/`（需转发） |
+| WhaleTrail 看板 | Mac mini | 8766 | 公网 `http://139.224.244.214/`（VPS nginx → 反向隧道，无需转发）；本机 `http://localhost:8766/`（需转发） |
 | OpenClaw Gateway | Mac mini | 18789 | `http://localhost:18789/health` |
 | Ollama | Mac mini | 11434 | `http://localhost:11434/api/tags` |
 | Clash 代理 | Mac mini | 7890 | 脚本默认 `HTTPS_PROXY` |
+
+## 公网入口（看板）
+
+看板经「Mac mini 反向隧道 + VPS nginx」对外提供，隧道与 nginx 均由常驻进程托管（launchd `com.zeph.reverse-tunnel` / systemd `nginx`），MacBook 无需再起转发。
+
+```bash
+open http://139.224.244.214/               # 稳定公网 URL
+curl -s http://139.224.244.214/_stcore/health   # 健康检查 → ok
+```
+
+链路：VPS `:80`（nginx，含 websocket 代理）→ VPS `127.0.0.1:8766`（反向隧道 `-R 127.0.0.1:8766:localhost:8766`）→ Mac mini `:8766`（streamlit）。
 
 端口转发（MacBook 上执行）：
 

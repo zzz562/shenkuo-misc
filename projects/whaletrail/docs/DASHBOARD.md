@@ -13,8 +13,8 @@
 |------|------|
 | 代码 | `scripts/dashboard.py` |
 | 主题 | `.streamlit/config.toml`（`base = dark`，`primaryColor = #e6b450`） |
-| 端口 | `:8766`（Mac mini 本机；MacBook 经 SSH 转发访问） |
-| 入口 | `http://localhost:8766/`（MacBook 需先转发） |
+| 端口 | `:8766`（Mac mini 本机；公网经反向隧道 + VPS nginx 80 暴露） |
+| 入口 | `http://139.224.244.214/`（公网稳定入口，无需转发）；`http://localhost:8766/`（本机转发兜底） |
 
 ---
 
