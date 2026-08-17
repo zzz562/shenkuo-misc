@@ -62,10 +62,10 @@ ssh -L 8766:localhost:8766 -L 18789:localhost:18789 -L 11434:localhost:11434 mac
 | `scripts/run-backtest.py` | 回测 | Mac mini（主）；MacBook 需 venv+代理 | yfinance、venv、代理 |
 | `scripts/analyze.py` | 回测结果格式化 | 任意（本地读 results） | venv |
 | `scripts/daily-report.sh` | 日报串联 | Mac mini（cron） | venv、代理 |
-| `scripts/paper-live.py` | 实时扫描 + Telegram | Mac mini（launchd） | yfinance、`TG_BOT_TOKEN`、代理 |
+| `scripts/paper-live.py` | 实时扫描 + Telegram（非交易时段自动跳过） | Mac mini（launchd） | yfinance、`TG_BOT_TOKEN`、代理 |
 | `scripts/sentiment.py` | X 情绪扫描 | Mac mini（cron） | X token、DeepSeek/Ollama、代理 |
 | `scripts/fetch-tvscreener-watchlist.py` | TradingView watchlist 快照 | Mac mini（cron/手动） | 直连 TV，无需代理 |
-| `scripts/ashare-paper.py` | A股低频率 paper（快照积累→日线→信号） | Mac mini（cron/手动） | venv、tvscreener、SQLite |
+| `scripts/ashare-paper.py` | A股低频率 paper（快照积累→日线→信号；交易日历+时段门禁） | Mac mini（cron/手动） | venv、tvscreener、SQLite、直连 SZSE（无需代理） |
 | `scripts/seed-ashare-history.py` | A股日线历史种子 | Mac mini（手动） | venv、tvdatafeed、代理 |
 | `scripts/watchlist-report.py` | watchlist Markdown 报表 | 任意（本地读 SQLite） | venv |
 | `scripts/dashboard.py` | Streamlit 看板 | Mac mini（headless） | venv、各服务健康 |

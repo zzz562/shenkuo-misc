@@ -6,8 +6,8 @@
 
 ```
 whaletrail/
-├── data/          DataLayer 门面 + yfinance(历史) + tvscreener(快照) + Parquet 缓存 + watchlist
-├── engine/        事件驱动回测（Backtester / Broker / Account / Clock / Event）
+├── data/          DataLayer 门面 + yfinance(历史) + tvscreener(快照) + Parquet 缓存 + watchlist + A股交易日历(trading_calendar)
+├── engine/        事件驱动回测（Backtester / Broker / Account / Clock / Event）+ 实时交易时段检查（session）
 ├── strategy/      策略基类 + 注册表 + 6 个策略
 ├── metrics/       收益/回撤/夏普/胜率/盈亏比（FIFO 计算 PnL）
 ├── reporting/     watchlist Markdown 报表
@@ -58,6 +58,11 @@ A 股低频率 paper 入口：`scripts/ashare-paper.py`（SMA 20/50 信号，位
 - 基类 `Strategy`：实现 `on_bar`；用 `buy` / `sell` / `order_target_percent` 下单；`pending_orders` 每 bar 被引擎清空。
 - 注册表 `strategy/registry.py` 是**唯一**策略来源：`STRATEGY_CLASSES`（回测用）+ `_build_signal_registry()`（paper-live 信号用）。新增策略两处都要登记。
 - `gold_sma`：SMA 20/50；金叉 → 目标仓位 80%；死叉 → 0%。
+
+## Live paper 不变量
+
+- `paper-live.py` 只在美股交易时段（Mon–Fri 09:30–16:00 ET，`engine/session.py`）扫描，并要求最新 5m K 线属于当日（`bar_is_fresh`，覆盖节假日与数据未更新）；周末/节假日/盘外不发信号、不更新 paper 仓位。
+- `ashare-paper.py` 只在 A 股交易日运行：交易日判断走深交所官方日历（`data/trading_calendar.py`，覆盖周末/节假日/调休，缓存于 `data_cache/`，断网回退周一~周五），时段窗口 09:30–16:00 CST（`engine/session.py` 的 `ashare_hours`）。15:30 CST 的 cron 在此窗口内。
 
 ## 标的与市场边界
 

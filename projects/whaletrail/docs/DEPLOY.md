@@ -40,7 +40,7 @@ ssh -L 8766:localhost:8766 -L 18789:localhost:18789 -L 11434:localhost:11434 mac
 
 | Label | 用途 |
 |-------|------|
-| `ai.whaletrail-live` | paper trading 实时扫描 |
+| `ai.whaletrail-live` | paper trading 实时扫描（仅美股交易时段，周末/节假日自动跳过） |
 | `ai.openclaw.gateway` | OpenClaw AI Agent 网关 |
 | `homebrew.mxcl.ollama` | 本地 LLM（qwen3:4b） |
 | `com.zeph.reverse-tunnel` | SSH 反向隧道 → VPS |
@@ -57,7 +57,7 @@ openclaw cron run whaletrail-sentiment   # 手动触发情绪扫描
 |------|------|------|
 | `whaletrail-daily` | 工作日 08:30 CST | `daily-report.sh gold_sma GLD` → Telegram |
 | `whaletrail-sentiment` | 每日 09:00 CST | X KOL 情绪扫描 → Telegram |
-| `whaletrail-ashare` | 工作日 15:30 CST | A股低频率 paper（`ashare-paper.py`）→ Telegram |
+| `whaletrail-ashare` | 工作日 15:30 CST | A股低频率 paper（`ashare-paper.py`，脚本内自检交易日历+时段）→ Telegram |
 
 ## 日志
 

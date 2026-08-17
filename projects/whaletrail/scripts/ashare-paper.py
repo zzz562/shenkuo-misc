@@ -8,6 +8,12 @@ Usage:
 Data path: tvscreener snapshot → SQLite ``quote_snapshots`` →
 ``build_daily_history`` → SMA 20/50 cross signal → paper position tracking
 (``results/ashare_paper_state.json``).
+
+Runs are gated on A-share trading days (SZSE official calendar via
+``whaletrail/data/trading_calendar.py``, covering weekends, holidays and
+make-up days) and the 09:30–16:00 CST snapshot window
+(``whaletrail/engine/session.py``); out-of-session runs skip without
+recording snapshots or firing signals.
 """
 
 from __future__ import annotations
@@ -15,15 +21,17 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from whaletrail.data.history import build_daily_history
+from whaletrail.data.trading_calendar import TradingCalendar
 from whaletrail.data.tvscreener_source import TVScreenerSource
 from whaletrail.data.watchlist import by_tv_symbol, load_watchlist
+from whaletrail.engine.session import CN_TZ, ashare_hours
 from whaletrail.indicators import cross_signal
 from whaletrail.storage.repository import Repository
 
@@ -78,6 +86,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--symbol", help="Single tvscreener symbol, e.g. SSE:601899")
     args = parser.parse_args()
+
+    today = datetime.now(CN_TZ).date()
+    if not ashare_hours():
+        print(
+            f"⏸ 非 A 股交易时段（盘外），跳过 | 当前 "
+            f"{datetime.now(CN_TZ).strftime('%Y-%m-%d %H:%M')} CST"
+        )
+        return
+    if not TradingCalendar().is_trading_day(today):
+        print(f"⏸ 今日非 A 股交易日（周末/节假日），跳过 | {today.isoformat()}")
+        return
 
     items = load_watchlist(WATCHLIST)
     a_items = [i for i in items if i.market == "china" and i.tradable]

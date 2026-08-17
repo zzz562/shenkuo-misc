@@ -2,6 +2,8 @@
 """WhaleTrail Paper Live — multi-strategy scan + Telegram.
 
 Gold-first: GLD runs a strategy panel; SPY is hedge context only.
+Scans are gated on NYSE regular hours (whaletrail/engine/session.py), so
+weekends/holidays/off-hours never produce signals or paper trades.
 
 Usage:
   python scripts/paper-live.py tick
@@ -30,6 +32,7 @@ SCAN_JOBS = [
         "symbol": "GLD",
         "label": "🥇 黄金",
         "role": "primary",
+        "market": "us",
         "strategies": [
             "gold_sma",
             "gold_sma_v2",
@@ -42,6 +45,7 @@ SCAN_JOBS = [
         "symbol": "SPY",
         "label": "📊 标普",
         "role": "hedge",
+        "market": "us",
         "strategies": ["ma_cross", "momentum"],
     },
 ]
@@ -97,9 +101,25 @@ def series(df: Any, col: str) -> list[float]:
 
 
 # ── Signal dispatch (single source: strategy registry) ──────────
+from whaletrail.engine.session import US_TZ, us_session  # noqa: E402
 from whaletrail.strategy.registry import _build_signal_registry  # noqa: E402
 
 SIGNAL_FNS = _build_signal_registry()
+
+
+def bar_is_fresh(df: Any) -> bool:
+    """True if the last bar belongs to today in the market timezone.
+
+    Guards against holidays and stale data: yfinance returns the previous
+    session's bars when the market is closed, and a signal computed on them
+    would be a paper trade on a non-trading day.
+    """
+    last = df.index[-1]
+    if last.tzinfo is None:
+        last_date = last.date()
+    else:
+        last_date = last.astimezone(US_TZ).date()
+    return last_date == datetime.now(US_TZ).date()
 
 
 # ── State / Telegram ─────────────────────────────────────────────
@@ -150,22 +170,34 @@ def update_pos_after_signal(state: dict, key: str, signal: str, price: float) ->
 
 
 # ── Scan ─────────────────────────────────────────────────────────
-def tick() -> None:
+def tick() -> Optional[str]:
+    """Run one scan pass; return a skip note when every job was skipped
+    (used by loop() to avoid repeating the same message)."""
     state = load_state()
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     day = date.today().isoformat()
     all_lines: list[str] = []
     gold_votes: list[str] = []
+    skip_reasons: list[str] = []
+    no_data = 0
 
     for job in SCAN_JOBS:
         symbol = job["symbol"]
         label = job["label"]
-        print(f"\n[{now}] {label} {symbol}")
-
+        market = job.get("market", "us")
+        if market == "us" and not us_session():
+            skip_reasons.append("session")
+            continue
         df = fetch_latest(symbol)
         if df is None:
+            no_data += 1
+            print(f"\n[{now}] {label} {symbol}")
             print("  ⚠️ no data")
             continue
+        if not bar_is_fresh(df):
+            skip_reasons.append("stale")
+            continue
+        print(f"\n[{now}] {label} {symbol}")
 
         closes = series(df, "close")
         highs = series(df, "high")
@@ -249,17 +281,38 @@ def tick() -> None:
         for line in all_lines:
             print(line)
 
+    n_jobs = len(SCAN_JOBS)
+    if len(skip_reasons) == n_jobs:
+        if skip_reasons and all(r == "stale" for r in skip_reasons):
+            return "⏸ 无今日 K 线（节假日或数据未更新），跳过本次扫描"
+        markets = sorted({job.get("market", "us") for job in SCAN_JOBS})
+        return f"⏸ 非交易时段（{'/'.join(markets)}），跳过本次扫描"
+    if no_data == n_jobs:
+        return "⏸ 数据拉取失败，跳过本次扫描"
+    return None
+
+
+_last_skip_note: Optional[str] = None
+
 
 def loop(interval: int = 600) -> None:
+    global _last_skip_note
     n_strat = sum(len(j["strategies"]) for j in SCAN_JOBS)
     print(
         f"🔄 Paper Live multi-strategy | interval={interval}s | "
         f"jobs={len(SCAN_JOBS)} strategies={n_strat}"
     )
     print(f"   Telegram: {'✅' if TG_TOKEN else '❌ set TG_BOT_TOKEN'}")
+    print("   Sessions: 美股 Mon–Fri 09:30–16:00 ET（周末/节假日自动跳过）")
     while True:
         try:
-            tick()
+            note = tick()
+            if note is not None:
+                if note != _last_skip_note:
+                    print(note)
+                    _last_skip_note = note
+            else:
+                _last_skip_note = None
         except Exception as e:
             print(f"  ⚠️ scan error: {e}")
         print(f"\n⏳ next in {interval}s …")
@@ -278,4 +331,6 @@ if __name__ == "__main__":
     if args.cmd == "loop":
         loop(args.interval)
     else:
-        tick()
+        note = tick()
+        if note:
+            print(note)
