@@ -54,11 +54,12 @@ yfinance ──► ParquetCache ──► Backtester ──► results/*.json
 5. A 股纳入低频率 paper trading 目标（2026-08-13）：数据走 tvscreener 快照积累成日线，不走 yfinance 历史回测；稳定性受限，不追求高频。
 6. live paper 增加交易时段检查（2026-08-17）：`paper-live.py`（美股）与 `ashare-paper.py`（A股）此前不检查营业时间，周末也会扫描并更新 paper 仓位。现由 `whaletrail/engine/session.py` 统一门禁：美股 Mon–Fri 09:30–16:00 ET + K 线当日新鲜度兜底（覆盖节假日）；A股交易日+时段窗口。
 7. A股节假日走深交所官方日历（2026-08-17）：周末排除无法覆盖十一/春节等长假。`ashare-paper.py` 交易日判断改用深交所官方接口 `whaletrail/data/trading_calendar.py`（含调休），缓存 `data_cache/trading_calendar_cn.txt`、按月增量拉取；未公告月份与断网时回退周一~五判断。美股已由 paper-live 的 K 线新鲜度兜底，无需日历。
-8. Live 信号统一为已收盘日线（2026-08-18）：paper-live 此前用 5m K 线跑日线参数的策略，与回测验证的周期不是同一个东西。现拉 ~420 天日线，信号只用已收盘 bar、按当日开盘价记账（对齐回测"信号日收盘→次日开盘成交"）。日线信号每交易日上午扫一次即够，不再 5m 盯盘。代码：`scripts/paper-live.py`。
+8. ~~Live 信号统一为已收盘日线~~（2026-08-18，已被决策 13 推翻）：曾把 paper-live 改成日线信号、按当日开盘价记账。
 9. 回测数据加价格量纲门禁（2026-08-18）：发现 GLD 回测结果的价格是 GC=F 量级（2018 年 $1227–1340，真实 GLD 为 $113–131），缓存张冠李戴。`whaletrail/data/cache.py` 按 symbol 校验中位价区间（`PRICE_BOUNDS`），读写双向拦截；`scripts/verify-cache.py` 在 Mac mini 审计存量缓存并可用 `--drop-invalid` 清理。
 10. A 股 paper 补交易规则与成本（2026-08-18）：信号=昨收、成交=今收（消除"信号价即成交价"的前视）；佣金万2.5（¥5 底）+ 卖出印花税 0.05% + 单边滑点 0.1%；涨跌停封板无法成交、挂单顺延（创业板/科创板 20%，主板 10%）；T+1；整手 100 股、每笔名义 ¥5 万。代码：`scripts/ashare-paper.py`。
 11. Live 簿记按 (symbol, strategy) 隔离 + 行情质检（2026-08-18）：多策略此前共用 `positions["GLD"]` 互相踩踏，gold_sma_v2 的 ATR 止损被污染。仓位/止损 key 统一为 `symbol|strategy`（`whaletrail/strategy/base.py position_key`），旧 state 加载时自动迁移。行情经 `validate_daily`（bar 数 / 非正价 / 单日 >25% 异动）+ 跨标的同价检测，不合格不出信号。代码：`scripts/paper-live.py`。
 12. 参数稳健性用网格验证（2026-08-18）：SMA 20/50 是否过拟合，用 `scripts/param-sweep.py` 的 fast×slow 网格 + B&H 基准判断：邻域成片为高原则可信，孤峰则过拟合。默认区间 2011 起，把 2011–2015 黄金熊市纳入样本。sweep 结果不写入 runs 表。
+13. Live 保持 5m/10m 盯盘，回测侧对齐 intraday（2026-08-18，推翻决策 8）：日线化损失了盘内响应，改为让回测验证"正在跑的策略"。回测引擎改为按 bar 驱动、周期无感（`whaletrail/engine/backtester.py`，订单仍在下一根 bar 开盘成交，防前视不变）；`run-backtest.py`/`param-sweep.py` 支持 `--interval 5m|10m|15m|30m|1h`；intraday 数据走 `whaletrail/data/intraday.py`（yfinance 5m 上限 60 天，Parquet 缓存跨窗口累积；10m 由 5m 重采样）；metrics 年化按 bar 周期数折算。live 信号只用已完成 bar、按现价（≈下一根 bar 开盘）记账。注意：5m 参数（SMA20/50 等）本身未经优化，先用 param-sweep --interval 5m 体检再谈信任。
 
 ## 决策记录规范
 
