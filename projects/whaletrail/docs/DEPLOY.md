@@ -74,9 +74,11 @@ tail -f ~/.openclaw/logs/gateway.err.log
 ```bash
 launchctl list | grep whaletrail-live
 launchctl print gui/$(id -u)/ai.whaletrail-live
-# 重启
+# 重启（实测 bootstrap 会静默失效——rc=0 但服务不登记；用 load -w 更稳）
 launchctl bootout gui/$(id -u)/ai.whaletrail-live
-launchctl bootstrap gui/$(id -u)/~/Library/LaunchAgents/ai.whaletrail-live.plist
+launchctl load -w ~/Library/LaunchAgents/ai.whaletrail-live.plist
+# 验证进程真的起来了
+launchctl list | grep whaletrail-live
 ```
 
 **venv 路径异常：**
