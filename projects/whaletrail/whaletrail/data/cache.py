@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 from pathlib import Path
 from datetime import date
@@ -29,6 +30,20 @@ PRICE_BOUNDS: dict[str, tuple[float, float]] = {
 }
 
 
+def _bounds_key(symbol: str) -> str:
+    """Map a cache key to its instrument for bounds lookup.
+
+    Intraday caches are keyed ``<symbol>_<interval>`` (e.g. ``GLD_5m``);
+    strip the interval suffix so they share the base instrument's bounds.
+    """
+    if symbol in PRICE_BOUNDS:
+        return symbol
+    base, _, suffix = symbol.rpartition("_")
+    if base and re.fullmatch(r"\d+[mhd]", suffix):
+        return base
+    return symbol
+
+
 def price_scale_violation(symbol: str, df: pd.DataFrame) -> str | None:
     """Return a reason string if *df*'s median close is outside the
     plausible bounds for *symbol*, else ``None``.
@@ -37,7 +52,7 @@ def price_scale_violation(symbol: str, df: pd.DataFrame) -> str | None:
     only a systematically wrong price scale (wrong instrument cached under
     this symbol) is rejected.
     """
-    bounds = PRICE_BOUNDS.get(symbol)
+    bounds = PRICE_BOUNDS.get(_bounds_key(symbol))
     if bounds is None or df is None or df.empty or "close" not in df.columns:
         return None
     median_close = float(df["close"].dropna().median())
