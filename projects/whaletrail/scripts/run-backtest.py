@@ -2,9 +2,14 @@
 """WhaleTrail backtest runner — gold-first, US hedge symbols via yfinance.
 
 Usage:
-  run-backtest.py [strategy] [symbol] [start] [end] [cash]
+  run-backtest.py [strategy] [symbol] [start] [end] [cash] [--interval 1d]
 
-Defaults: gold_sma GLD 2018-01-01 2026-08-12 100000
+Defaults: gold_sma GLD 2018-01-01 <today> 100000 --interval 1d
+
+Intraday: --interval 5m|10m|15m|30m|1h runs the same engine bar-by-bar on
+yfinance intraday data (5m window ≈ last 60 days; cache accumulates across
+runs).  This is how the 5m live-scan parameters get their backtest: same
+bars, same no-look-ahead fill-at-next-open rule.
 """
 from __future__ import annotations
 
@@ -30,12 +35,48 @@ PROXY = os.environ.get("WT_PROXY_URL") or os.environ.get("HTTPS_PROXY") or "http
 os.environ.setdefault("HTTPS_PROXY", PROXY)
 os.environ.setdefault("HTTP_PROXY", PROXY)
 
+# Annualisation factors (US regular session = 390 min).
+PERIODS_PER_YEAR = {
+    "1d": 252,
+    "1h": 252 * 6.5,
+    "30m": 252 * 13,
+    "15m": 252 * 26,
+    "10m": 252 * 39,
+    "5m": 252 * 78,
+    "1m": 252 * 390,
+}
+
+
+def _parse_args() -> tuple[list[str], str]:
+    args = sys.argv[1:]
+    interval = "1d"
+    if "--interval" in args:
+        i = args.index("--interval")
+        try:
+            interval = args[i + 1]
+        except IndexError:
+            raise SystemExit("--interval requires a value (1d/5m/10m/15m/30m/1h)")
+        del args[i : i + 2]
+    return args, interval
+
+
+class _StaticSource:
+    """In-memory data source over a pre-fetched DataFrame."""
+
+    def __init__(self, df):
+        self._df = df
+
+    def get_daily(self, symbol, start, end):
+        return self._df
+
+
 def main() -> None:
-    strategy_name = sys.argv[1] if len(sys.argv) > 1 else "gold_sma"
-    symbol = sys.argv[2] if len(sys.argv) > 2 else "GLD"
-    start_str = sys.argv[3] if len(sys.argv) > 3 else "2018-01-01"
-    end_str = sys.argv[4] if len(sys.argv) > 4 else "2026-08-12"
-    cash = float(sys.argv[5]) if len(sys.argv) > 5 else 100_000.0
+    args, interval = _parse_args()
+    strategy_name = args[0] if len(args) > 0 else "gold_sma"
+    symbol = args[1] if len(args) > 1 else "GLD"
+    start_str = args[2] if len(args) > 2 else "2018-01-01"
+    end_str = args[3] if len(args) > 3 else date.today().isoformat()
+    cash = float(args[4]) if len(args) > 4 else 100_000.0
 
     # Validate scope (raises on A-share / HK)
     parsed = parse_symbol(symbol)
@@ -54,7 +95,21 @@ def main() -> None:
         sys.exit(1)
 
     strategy = StrategyClass()
-    src = DataLayer()
+    if interval == "1d":
+        src = DataLayer()
+    else:
+        from whaletrail.data.intraday import get_bars
+
+        df = get_bars(ticker, interval,
+                      date.fromisoformat(start_str), date.fromisoformat(end_str))
+        if df is None or df.empty:
+            print(json.dumps(
+                {"error": f"no {interval} data for {ticker} {start_str}→{end_str}"},
+                ensure_ascii=False))
+            sys.exit(1)
+        print(f"  {interval} bars: {len(df)}  "
+              f"{df.index[0]} → {df.index[-1]}", file=sys.stderr)
+        src = _StaticSource(df)
 
     bt = Backtester(
         symbols=[ticker],
@@ -73,10 +128,12 @@ def main() -> None:
         results["trades"],
         [p["equity"] for p in results.get("equity_curve", [])],
         cash,
+        periods_per_year=int(PERIODS_PER_YEAR.get(interval, 252)),
     )
 
     results["strategy"] = strategy_name
     results["symbol"] = ticker
+    results["interval"] = interval
     results["role"] = parsed.role
     results["market"] = parsed.market.value
     results["start"] = start_str
@@ -85,7 +142,8 @@ def main() -> None:
     out_dir = ROOT / "results"
     out_dir.mkdir(exist_ok=True)
     timestamp = date.today().strftime("%Y%m%d_%H%M%S")
-    out_file = out_dir / f"backtest_{strategy_name}_{ticker}_{timestamp}.json"
+    interval_tag = "" if interval == "1d" else f"_{interval}"
+    out_file = out_dir / f"backtest_{strategy_name}_{ticker}{interval_tag}_{timestamp}.json"
     with open(out_file, "w") as f:
         json.dump(results, f, default=str, indent=2, ensure_ascii=False)
 
@@ -124,6 +182,7 @@ def main() -> None:
         "file": str(out_file),
         "strategy": strategy_name,
         "symbol": ticker,
+        "interval": interval,
         "role": parsed.role,
         "final_equity": round(results["final_equity"], 2),
         "total_return_pct": round(results["total_return"] * 100, 2),
