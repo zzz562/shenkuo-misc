@@ -39,7 +39,7 @@ class DataSource(Protocol):
 
 @dataclass
 class _TradeRecord:
-    date: date
+    date: Any  # bar timestamp (pd.Timestamp for intraday, date-like for daily)
     symbol: str
     side: str
     quantity: float
@@ -49,7 +49,7 @@ class _TradeRecord:
 
 @dataclass
 class _EquityPoint:
-    date: date
+    date: Any  # bar timestamp
     equity: float
     cash: float
 
@@ -62,8 +62,9 @@ class _EquityPoint:
 class Backtester:
     """Event‑loop backtester.
 
-    Loads all data upfront, then iterates date‑by‑date, symbol‑by‑symbol
-    calling the strategy and matching orders.
+    Loads all data upfront, then iterates bar‑by‑bar (timeframe‑agnostic:
+    daily or intraday), symbol‑by‑symbol calling the strategy and matching
+    orders.  Orders placed on bar N fill at bar N+1's open (no look‑ahead).
 
     Args:
         symbols: List of tickers to backtest.
@@ -131,12 +132,12 @@ class Backtester:
             df = df.sort_index()
             self._data_cache[symbol] = df
 
-        # ---- Align all symbols to a common date range ----------------
-        trading_dates = self._build_trading_dates()
-        if not trading_dates:
-            raise ValueError("No trading dates after aligning all symbols")
+        # ---- Align all symbols to a common bar timeline --------------
+        timeline = self._build_timeline()
+        if not timeline:
+            raise ValueError("No bars after aligning all symbols")
 
-        clock = TradingClock(trading_dates)
+        clock = TradingClock(timeline)
 
         # ---- Wire strategy to broker & account -----------------------
         self.strategy.broker = self._broker
@@ -144,8 +145,8 @@ class Backtester:
         self.strategy.on_start()
 
         # ---- Main loop -----------------------------------------------
-        for today in clock:
-            self._process_day(today)
+        for ts in clock:
+            self._process_bar(ts)
 
         # ---- Teardown ------------------------------------------------
         self.strategy.on_finish()
@@ -165,8 +166,14 @@ class Backtester:
         self.strategy.current_prices = {}
         self.strategy.pending_orders = []
 
-    def _build_trading_dates(self) -> list[date]:
-        """Union of all symbols' date indices, filtered to [start, end]."""
+    def _build_timeline(self) -> list[pd.Timestamp]:
+        """Union of all symbols' bar timestamps, filtered to [start, end].
+
+        The engine is bar-driven and timeframe-agnostic: for daily data the
+        timeline holds one timestamp per session, for intraday data one per
+        bar.  The end date is inclusive for the whole day (intraday bars
+        timestamped during *end* are kept).
+        """
         all_indices = [df.index for df in self._data_cache.values()]
         if not all_indices:
             return []
@@ -175,24 +182,23 @@ class Backtester:
         for idx in all_indices[1:]:
             common = common.union(idx)
 
-        common = common[
-            (common >= pd.Timestamp(self.start)) & (common <= pd.Timestamp(self.end))
-        ]
-        return sorted(d.date() for d in common)
+        end_exclusive = pd.Timestamp(self.end) + pd.Timedelta(days=1)
+        common = common[(common >= pd.Timestamp(self.start)) & (common < end_exclusive)]
+        return sorted(common)
 
-    def _process_day(self, today: date) -> None:
-        """Process all symbols for a single trading day.
+    def _process_bar(self, ts: pd.Timestamp) -> None:
+        """Process all symbols for a single bar.
 
         Order of operations (avoids look‑ahead bias):
-        1. Match orders queued from *yesterday* at today's open.
-        2. Feed today's bar to the strategy (new orders go to pending_orders).
-        3. Send pending_orders to broker for next-day execution.
-        4. Record end-of-day equity snapshot.
+        1. Match orders queued from the *previous* bar at this bar's open.
+        2. Feed this bar to the strategy (new orders go to pending_orders).
+        3. Send pending_orders to broker for next-bar execution.
+        4. Record end-of-bar equity snapshot.
         """
 
-        # ── Step 1: match yesterday's queued orders against today's open ──
+        # ── Step 1: match previous bar's queued orders against this open ──
         for symbol in self.symbols:
-            bar = self._get_bar(symbol, today)
+            bar = self._get_bar(symbol, ts)
             if bar is None:
                 continue
 
@@ -201,7 +207,7 @@ class Backtester:
                 self._account.apply_fill(fill)
                 self._trades.append(
                     _TradeRecord(
-                        date=today,
+                        date=ts,
                         symbol=fill.symbol,
                         side="BUY" if fill.quantity > 0 else "SELL",
                         quantity=abs(fill.quantity),
@@ -210,37 +216,36 @@ class Backtester:
                     )
                 )
 
-        # Day-order expiry: anything not filled at today's open dies here.
+        # Day-order expiry: anything not filled at this bar's open dies here.
         self._broker.cancel_unfilled()
 
         # ── Step 2: feed bars to strategy → new orders go to pending_orders ──
         for symbol in self.symbols:
-            bar = self._get_bar(symbol, today)
+            bar = self._get_bar(symbol, ts)
             if bar is None:
                 continue
 
             self.strategy.current_prices[symbol] = bar["close"]
             self.strategy.on_bar(symbol, bar)
 
-        # ── Step 3: submit pending_orders to broker for next-day execution ──
+        # ── Step 3: submit pending_orders to broker for next-bar execution ──
         for order in self.strategy.pending_orders:
             self._broker.place_order(order)
         self.strategy.pending_orders = []
 
-        # ── Step 4: end-of-day equity snapshot ──
+        # ── Step 4: end-of-bar equity snapshot ──
         self._account.mark_prices(self.strategy.current_prices)
         equity = self._account.total_equity(self.strategy.current_prices)
         self._equity_curve.append(
-            _EquityPoint(date=today, equity=equity, cash=self._account.cash)
+            _EquityPoint(date=ts, equity=equity, cash=self._account.cash)
         )
 
-    def _get_bar(self, symbol: str, today: date) -> dict[str, Any] | None:
-        """Extract a single bar dict for a symbol on a given date."""
+    def _get_bar(self, symbol: str, ts: pd.Timestamp) -> dict[str, Any] | None:
+        """Extract a single bar dict for *symbol* at timestamp *ts*."""
         df = self._data_cache.get(symbol)
         if df is None:
             return None
 
-        ts = pd.Timestamp(today)
         if ts not in df.index:
             return None
 
@@ -254,7 +259,7 @@ class Backtester:
             "low": float(row["low"]),
             "close": float(row["close"]),
             "volume": float(row["volume"]),
-            "date": today,
+            "date": ts,
         }
 
     def _build_results(self) -> dict[str, Any]:

@@ -1,17 +1,16 @@
 """Trading clock for the WhaleTrail backtesting engine.
 
-Iterates over a list of trading dates, driving the main backtest loop
-one day at a time.
+Iterates over a list of bar timestamps, driving the main backtest loop
+one bar at a time (timeframe-agnostic: daily sessions or intraday bars).
 """
 
 from __future__ import annotations
 
-from datetime import date
 from typing import Iterator
 
 
 class TradingClock:
-    """A simple trading clock that yields dates one at a time.
+    """A simple trading clock that yields bar timestamps one at a time.
 
     Usage::
 
@@ -20,11 +19,9 @@ class TradingClock:
             print(today)
     """
 
-    def __init__(self, dates: list[date]) -> None:
-        """Initialise the clock with a list of trading dates.
-
-        Args:
-            dates: A chronologically ordered list of dates to iterate over.
+    def __init__(self, dates: list) -> None:
+        """Initialise the clock with an ordered list of bar timestamps
+        (``date`` for daily data, ``pd.Timestamp`` for intraday).
         """
         self.dates: list[date] = list(dates)
         self._index: int = 0

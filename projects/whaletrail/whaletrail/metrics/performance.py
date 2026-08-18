@@ -50,6 +50,7 @@ def calculate_metrics(
     trades: list[dict[str, Any]],
     equity_curve: list[float],
     initial_cash: float,
+    periods_per_year: int = 252,
 ) -> dict[str, Any]:
     """Compute a standard suite of performance metrics.
 
@@ -63,6 +64,9 @@ def calculate_metrics(
         element should equal *initial_cash* before any trades.
     initial_cash : float
         Starting portfolio cash.
+    periods_per_year : int
+        Annualisation factor: 252 for daily bars; for intraday use
+        252 × bars-per-session (e.g. 5m ≈ 19,656).
 
     Returns
     -------
@@ -102,10 +106,10 @@ def calculate_metrics(
     result["total_return_abs"] = round(total_return_abs, 4)
 
     # ---- Annualised return ----------------------------------------------
-    trading_days = len(equity_curve) - 1  # number of periods
-    if trading_days > 0:
+    n_periods = len(equity_curve) - 1
+    if n_periods > 0:
         annual_return_pct = (
-            (final_equity / initial_cash) ** (252.0 / trading_days) - 1.0
+            (final_equity / initial_cash) ** (float(periods_per_year) / n_periods) - 1.0
         ) * 100.0
     else:
         annual_return_pct = 0.0
@@ -134,19 +138,20 @@ def calculate_metrics(
     result["max_drawdown"] = round(max_dd * 100.0, 4)
 
     # ---- Sharpe ratio ---------------------------------------------------
-    # Assume 252 trading days, risk-free rate = 0.02.
-    rf_daily = 0.02 / 252.0
+    # Risk-free rate = 2 % per year, scaled to per-bar by periods_per_year.
+    rf_per_bar = 0.02 / float(periods_per_year)
+    sqrt_ppy = math.sqrt(float(periods_per_year))
     if len(daily_returns) > 1:
         mean_ret = sum(daily_returns) / len(daily_returns)
-        excess = mean_ret - rf_daily
+        excess = mean_ret - rf_per_bar
         variance = sum((r - mean_ret) ** 2 for r in daily_returns) / (
             len(daily_returns) - 1
         )
         std_daily = math.sqrt(variance) if variance > 0 else 0.0
-        result["volatility"] = round(std_daily * math.sqrt(252.0) * 100.0, 4)
+        result["volatility"] = round(std_daily * sqrt_ppy * 100.0, 4)
 
         if std_daily > 0:
-            sharpe = (excess / std_daily) * math.sqrt(252.0)
+            sharpe = (excess / std_daily) * sqrt_ppy
         else:
             sharpe = 0.0
     else:
