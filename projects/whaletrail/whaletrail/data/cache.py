@@ -12,6 +12,44 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+# Plausible close-price bounds per symbol (native quote currency, generous
+# headroom for multi-year drift).  Their job is to catch catastrophic
+# mix-ups — e.g. GC=F (~$1,000–$4,000) rows cached under GLD (~$100–$400) —
+# not to validate everyday prices.  Unknown symbols are not checked.
+PRICE_BOUNDS: dict[str, tuple[float, float]] = {
+    "GLD": (30.0, 800.0),
+    "IAU": (5.0, 80.0),
+    "SLV": (5.0, 200.0),
+    "GC=F": (500.0, 20000.0),
+    "SI=F": (10.0, 500.0),
+    "SPY": (100.0, 2000.0),
+    "QQQ": (100.0, 2500.0),
+    "^GSPC": (1000.0, 20000.0),
+    "CL=F": (5.0, 300.0),
+}
+
+
+def price_scale_violation(symbol: str, df: pd.DataFrame) -> str | None:
+    """Return a reason string if *df*'s median close is outside the
+    plausible bounds for *symbol*, else ``None``.
+
+    The median is used so a handful of bad ticks cannot trip the guard;
+    only a systematically wrong price scale (wrong instrument cached under
+    this symbol) is rejected.
+    """
+    bounds = PRICE_BOUNDS.get(symbol)
+    if bounds is None or df is None or df.empty or "close" not in df.columns:
+        return None
+    median_close = float(df["close"].dropna().median())
+    lo, hi = bounds
+    if not lo <= median_close <= hi:
+        return (
+            f"median close {median_close:.2f} outside plausible "
+            f"{symbol} range [{lo}, {hi}] — wrong-instrument data?"
+        )
+    return None
+
+
 class ParquetCache:
     """File-system cache storing DataFrames as Parquet files.
 
@@ -70,6 +108,14 @@ class ParquetCache:
         if df.empty:
             return None
 
+        violation = price_scale_violation(symbol, df)
+        if violation is not None:
+            logger.error(
+                "Cache rejected for %s (%s). Delete %s to force a re-fetch.",
+                symbol, violation, path,
+            )
+            return None
+
         # Ensure datetime index
         if not isinstance(df.index, pd.DatetimeIndex):
             df.index = pd.to_datetime(df.index)
@@ -100,6 +146,11 @@ class ParquetCache:
             OHLCV data — must have a ``DatetimeIndex``.
         """
         if df is None or df.empty:
+            return
+
+        violation = price_scale_violation(symbol, df)
+        if violation is not None:
+            logger.error("Refusing to cache %s: %s", symbol, violation)
             return
 
         path = self._path_for(symbol)
