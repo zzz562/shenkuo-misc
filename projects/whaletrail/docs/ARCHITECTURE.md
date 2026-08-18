@@ -39,7 +39,7 @@ tvscreener ─► TVScreenerSource ─► quote_snapshots ─► build_daily_his
 
 入口：`whaletrail/data/layer.py` 的 `DataLayer`。快照源的 yfinance fallback 是待办（需 tv/yahoo 符号映射）。
 
-A 股低频率 paper 入口：`scripts/ashare-paper.py`（SMA 20/50 信号，位置状态存 `results/ashare_paper_state.json`）。
+A 股低频率 paper 入口：`scripts/ashare-paper.py`（SMA 20/50 昨收信号 + 成本/涨跌停/T+1 模型 + 跟庄量价代理，状态存 `results/ashare_paper_state.json`）。
 
 ## 引擎不变量（重要）
 
@@ -49,8 +49,8 @@ A 股低频率 paper 入口：`scripts/ashare-paper.py`（SMA 20/50 信号，位
    3. 挂单提交给 broker，次日执行
    4. 记录当日 equity 快照
 2. **市场单按 open 成交**；限价单在 bar 的 high/low 范围内按限价成交。
-3. **全额成交**（无部分成交）；佣金 `max(0.0005 * qty * price, 0)`，无滑点。
-4. **Account**：`equity = cash + Σ(position qty * latest_price)`；买扣现金，卖加现金，佣金累加 `total_commission`。
+3. **全额成交**（无部分成交）；委托数量向下取整到整股；佣金 `max(0.0005 * qty * price, 0)`，无滑点。订单当日有效：当日未成交的挂单由 `broker.cancel_unfilled()` 作废，不会滞留到之后日期按过时价格成交。
+4. **Account**：`equity = cash + Σ(position qty * latest_price)`；买扣现金，卖加现金，佣金累加 `total_commission`。持仓估值以 `last_prices` 缓存兜底（apply_fill / mark_prices 记录），价格表缺 symbol 时按最后已知价估值，不会静默从净值中消失。
 5. **数据源协议**：`get_daily(symbol, start, end) -> DataFrame`，列 `open/high/low/close/volume`，索引 `DatetimeIndex` 升序、tz-naive。
 
 ## 策略
@@ -61,8 +61,8 @@ A 股低频率 paper 入口：`scripts/ashare-paper.py`（SMA 20/50 信号，位
 
 ## Live paper 不变量
 
-- `paper-live.py` 只在美股交易时段（Mon–Fri 09:30–16:00 ET，`engine/session.py`）扫描，并要求最新 5m K 线属于当日（`bar_is_fresh`，覆盖节假日与数据未更新）；周末/节假日/盘外不发信号、不更新 paper 仓位。
-- `ashare-paper.py` 只在 A 股交易日运行：交易日判断走深交所官方日历（`data/trading_calendar.py`，覆盖周末/节假日/调休，缓存于 `data_cache/`，断网回退周一~周五），时段窗口 09:30–16:00 CST（`engine/session.py` 的 `ashare_hours`）。15:30 CST 的 cron 在此窗口内。
+- `paper-live.py` 只在美股交易时段（Mon–Fri 09:30–16:00 ET，`engine/session.py`）扫描。信号用**已收盘日线**（~420 天 1d K 线，剔除当日未完成 bar），按**当日开盘价**记账——与回测"信号日收盘 → 次日开盘成交"一致；每交易日上午扫一次即可，不再 5m 盯盘。数据须过 `validate_daily`（bar 数 ≥260 / 非正价 / 单日 >25% 异动）与跨标的同价检测，不合格不出信号。paper 仓位与 ATR 止损按 `symbol|strategy` 隔离（`strategy/base.py` 的 `position_key`），旧 state 加载时自动迁移。
+- `ashare-paper.py` 只在 A 股交易日运行：交易日判断走深交所官方日历（`data/trading_calendar.py`，覆盖周末/节假日/调休，缓存于 `data_cache/`，断网回退周一~周五），时段窗口 09:30–16:00 CST（`engine/session.py` 的 `ashare_hours`）。15:30 CST 的 cron 在此窗口内。信号用截至昨日的日线、成交记今日收盘价；成本模型为佣金万2.5（¥5 底）+ 卖出印花税 0.05% + 单边滑点 0.1%；涨跌停封板（创业板/科创板 20%、主板 10%）无法成交则挂单顺延；T+1；整手 100 股、每笔名义 ¥5 万。
 
 ## 标的与市场边界
 
@@ -72,7 +72,8 @@ A 股低频率 paper 入口：`scripts/ashare-paper.py`（SMA 20/50 信号，位
 
 ## 缓存
 
-- `ParquetCache`：`data_cache/<symbol>.parquet`，按日期 upsert（新行覆盖旧行）；文件名字符 `/`、`\`、`:` 替换为 `_`。
+- `ParquetCache`：`data_cache/<symbol>.parquet`，按日期 upsert（新行覆盖旧行）；文件名字符 `/`、`\`、`:` 替换为 `_`。读写均过 `price_scale_violation` 中位价区间校验（`PRICE_BOUNDS`，防 GLD/GC=F 张冠李戴）；存量缓存用 `scripts/verify-cache.py` 审计（`--drop-invalid` 清理）。
+- 参数稳健性工具：`scripts/param-sweep.py`（fast×slow 网格 + B&H 基准，默认 2011 起含黄金熊市；结果只写 JSON，不进 runs 表）。
 - yfinance 的 `GC=F` 等期货用 `auto_adjust=False`，其余 `auto_adjust=True`。
 
 ## 存储
@@ -85,3 +86,4 @@ A 股低频率 paper 入口：`scripts/ashare-paper.py`（SMA 20/50 信号，位
 
 - `calculate_metrics`：252 交易日年化；无风险利率 2%；夏普 / 回撤 / 胜率 / 盈亏比。
 - `compute_trade_pnl`：FIFO 配对卖单与最早买单，卖单带 `pnl` / `pnl_per_share`。
+- `indicators` 另提供 `volume_zscore` / `is_breakout` / `whale_flag`：跟庄量价代理（放量 z≥2 + 20 日收盘新高），ashare-paper 观察用——是价量趋势代理，不是大单/龙虎榜数据。
