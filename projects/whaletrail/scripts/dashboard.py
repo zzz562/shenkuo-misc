@@ -632,9 +632,16 @@ def _overview_panel() -> None:
         spy = snap.get("SPY", {})
         price = gld.get("price")
         stal = _staleness(gld.get("ts", "")) if gld else ""
+        # GLD share ≈ 0.0905 oz; show the spot-gold equivalent to avoid
+        # ETF-share-price vs spot-price confusion.
+        sub_parts = []
+        if price:
+            sub_parts.append(f"≈ 现货 ${price * 11.05:,.0f}/oz")
+        if spy.get("price"):
+            sub_parts.append(f"SPY ${spy['price']:,.2f}")
         cards.append({"label": "GLD 实时价格", "value": f"${price:,.2f}" if price else "—",
                       "delta": stal, "delta_color": _staleness_color(stal) if stal else "#8b98a9",
-                      "sub": f"SPY ${spy.get('price', 0):,.2f}" if spy.get("price") else "",
+                      "sub": " · ".join(sub_parts),
                       "accent": "#e6b450"})
     else:
         cards.append({"label": "GLD 实时价格", "value": "—",
@@ -819,10 +826,15 @@ def _live_panel() -> None:
             price = info.get("price")
             stal = _staleness(info.get("ts", ""))
             accent = "#e6b450" if sym == "GLD" else "#38bdf8"
+            sub = info.get("ts", "")
+            if sym == "GLD" and price:
+                sub = f"≈ 现货 ${price * 11.05:,.0f}/oz · {sub}"
+            if info.get("mode") == "observation":
+                sub = f"🔎 观察 · {sub}"
             cards.append({"label": f"{sym} 实时价格",
                           "value": f"${price:,.2f}" if price else "—",
                           "delta": stal, "delta_color": _staleness_color(stal) if stal else "#8b98a9",
-                          "sub": info.get("ts", ""), "accent": accent})
+                          "sub": sub, "accent": accent})
         _card_row(cards, cols=max(1, len(cards)))
 
     signals = _parse_signals(live.get("last_signals") or {})

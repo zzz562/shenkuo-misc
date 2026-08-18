@@ -67,6 +67,12 @@ os.environ.setdefault("HTTP_PROXY", PROXY)
 # Scan timeframe.  10m bars are resampled from 5m by the intraday module.
 INTERVAL = "5m"
 INTERVAL_MIN = int(INTERVAL[:-1]) if INTERVAL.endswith("m") else 60
+# Observation-only mode (SCOPE decision 14, 2026-08-18): the 5m grid sweep
+# showed no positive-expectancy SMA-cross parameters (0/35 beat B&H, median
+# Sharpe -1.24).  Signals are pushed tagged as observation — not entries.
+OBSERVATION_ONLY = True
+# GLD share ≈ 0.0905 oz of spot gold (decays slowly with the expense ratio).
+GLD_SPOT_FACTOR = 11.05
 LOOKBACK_DAYS = 10
 MIN_BARS = 260  # covers SMA-200 strategies with room to spare
 # Reject the series when one completed bar moves more than this vs the
@@ -298,9 +304,15 @@ def tick() -> Optional[str]:
                 continue
 
             emoji = "🟢" if sig == "BUY" else "🔴"
+            obs = "🔎 观察信号（无正期望，勿跟单）\n" if OBSERVATION_ONLY else ""
+            spot = (
+                f"≈ 现货 ${price * GLD_SPOT_FACTOR:,.0f}/oz\n"
+                if symbol == "GLD" else ""
+            )
             msg = (
-                f"{emoji} *{label} {symbol}* `{name}` → *{sig}*\n"
+                f"{obs}{emoji} *{label} {symbol}* `{name}` → *{sig}*\n"
                 f"信号 bar {signal_bar}（{INTERVAL}）· 按现价 ${price:.2f} 记账\n"
+                f"{spot}"
                 f"{now} · WhaleTrail Live"
             )
             if send_telegram(msg):
@@ -319,9 +331,11 @@ def tick() -> Optional[str]:
             gold_votes = [f"{k}:{v}" for k, v in votes.items()]
             snap_key = f"{symbol}|consensus|{consensus}"
             if consensus != "MIXED" and state.get("last_signals", {}).get(snap_key) != day:
+                obs = "🔎 观察模式（无正期望，勿跟单）\n" if OBSERVATION_ONLY else ""
                 body = (
-                    f"📡 *GLD 策略面板共识 → {consensus}*\n"
-                    f"现价 ${price:.2f} | 票数 BUY {buys}/{n} SELL {sells}/{n}\n"
+                    f"{obs}📡 *GLD 策略面板共识 → {consensus}*\n"
+                    f"现价 ${price:.2f}（≈ 现货 ${price * GLD_SPOT_FACTOR:,.0f}/oz）"
+                    f" | 票数 BUY {buys}/{n} SELL {sells}/{n}\n"
                     f"{', '.join(gold_votes)}\n"
                     f"{now}"
                 )
@@ -338,6 +352,7 @@ def tick() -> Optional[str]:
             "prev_bar_close": last_close,
             "signal_bar": signal_bar,
             "interval": INTERVAL,
+            "mode": "observation" if OBSERVATION_ONLY else "paper",
             "votes": votes,
             "ts": now,
         }

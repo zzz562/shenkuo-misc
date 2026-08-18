@@ -60,6 +60,7 @@ yfinance ──► ParquetCache ──► Backtester ──► results/*.json
 11. Live 簿记按 (symbol, strategy) 隔离 + 行情质检（2026-08-18）：多策略此前共用 `positions["GLD"]` 互相踩踏，gold_sma_v2 的 ATR 止损被污染。仓位/止损 key 统一为 `symbol|strategy`（`whaletrail/strategy/base.py position_key`），旧 state 加载时自动迁移。行情经 `validate_daily`（bar 数 / 非正价 / 单日 >25% 异动）+ 跨标的同价检测，不合格不出信号。代码：`scripts/paper-live.py`。
 12. 参数稳健性用网格验证（2026-08-18）：SMA 20/50 是否过拟合，用 `scripts/param-sweep.py` 的 fast×slow 网格 + B&H 基准判断：邻域成片为高原则可信，孤峰则过拟合。默认区间 2011 起，把 2011–2015 黄金熊市纳入样本。sweep 结果不写入 runs 表。
 13. Live 保持 5m/10m 盯盘，回测侧对齐 intraday（2026-08-18，推翻决策 8）：日线化损失了盘内响应，改为让回测验证"正在跑的策略"。回测引擎改为按 bar 驱动、周期无感（`whaletrail/engine/backtester.py`，订单仍在下一根 bar 开盘成交，防前视不变）；`run-backtest.py`/`param-sweep.py` 支持 `--interval 5m|10m|15m|30m|1h`；intraday 数据走 `whaletrail/data/intraday.py`（yfinance 5m 上限 60 天，Parquet 缓存跨窗口累积；10m 由 5m 重采样）；metrics 年化按 bar 周期数折算。live 信号只用已完成 bar、按现价（≈下一根 bar 开盘）记账。注意：5m 参数（SMA20/50 等）本身未经优化，先用 param-sweep --interval 5m 体检再谈信任。
+14. 5m live 面板降级为观察信号（2026-08-18）：`param-sweep --interval 5m` 全网格 0/35 跑赢 B&H、中位 Sharpe -1.24，5m 快速交叉无正期望、佣金磨损严重（40 日 $2.7k/10 万）。扫描与推送保留，但 Telegram/看板统一标记"🔎 观察（勿跟单）"（`paper-live.py OBSERVATION_ONLY`），不作为进场依据；找到 5m 正期望参数前不恢复 paper 跟单。日线层面另注：gold_sma 20/50 在 2011→今也跑输 B&H（+80.6% vs +193.8%，Sharpe 0.23 vs 0.38），其价值在压回撤（-16.6% vs -45.6%），参数稳健性不足（3/35 胜出且散点分布），是否继续作为主策略待复审。
 
 ## 决策记录规范
 
