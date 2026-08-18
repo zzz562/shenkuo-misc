@@ -210,6 +210,9 @@ class Backtester:
                     )
                 )
 
+        # Day-order expiry: anything not filled at today's open dies here.
+        self._broker.cancel_unfilled()
+
         # ── Step 2: feed bars to strategy → new orders go to pending_orders ──
         for symbol in self.symbols:
             bar = self._get_bar(symbol, today)
@@ -225,6 +228,7 @@ class Backtester:
         self.strategy.pending_orders = []
 
         # ── Step 4: end-of-day equity snapshot ──
+        self._account.mark_prices(self.strategy.current_prices)
         equity = self._account.total_equity(self.strategy.current_prices)
         self._equity_curve.append(
             _EquityPoint(date=today, equity=equity, cash=self._account.cash)

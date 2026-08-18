@@ -56,6 +56,9 @@ class Account:
     cash: float = field(init=False)
     positions: dict[str, Position] = field(default_factory=dict)
     total_commission: float = field(default=0.0, init=False)
+    # Last known market price per symbol; guarantees every open position
+    # can be marked even when the caller's price map lacks the symbol.
+    last_prices: dict[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.cash = self.initial_cash
@@ -81,17 +84,29 @@ class Account:
     #  Equity
     # ------------------------------------------------------------------
 
-    def total_equity(self, latest_prices: dict[str, float]) -> float:
+    def mark_prices(self, prices: dict[str, float]) -> None:
+        """Record the latest known market prices (marks the book)."""
+        for sym, price in prices.items():
+            if price is not None and price > 0:
+                self.last_prices[sym] = price
+
+    def total_equity(self, latest_prices: dict[str, float] | None = None) -> float:
         """Total account equity = cash + sum(position_value for each symbol).
 
-        Args:
-            latest_prices: Mapping of symbol → latest market price.
+        Each position is marked at *latest_prices* when available, else at
+        the most recent price seen via :meth:`mark_prices`/:meth:`apply_fill`.
+        A position without any known price is marked at its avg cost rather
+        than silently dropped from equity.
         """
-        positions_value = sum(
-            self.position_value(sym, latest_prices[sym])
-            for sym in self.positions
-            if sym in latest_prices
-        )
+        prices = dict(self.last_prices)
+        if latest_prices:
+            prices.update(latest_prices)
+        positions_value = 0.0
+        for sym, pos in self.positions.items():
+            if pos.is_flat:
+                continue
+            price = prices.get(sym, pos.avg_cost)
+            positions_value += pos.quantity * price
         return self.cash + positions_value
 
     # ------------------------------------------------------------------
@@ -135,6 +150,8 @@ class Account:
         # Cash impact: buying costs cash, selling adds cash
         self.cash -= fill_qty * fill.price + fill.commission
         self.total_commission += fill.commission
+        if fill.price > 0:
+            self.last_prices[fill.symbol] = fill.price
 
     # ------------------------------------------------------------------
     #  Representation

@@ -7,14 +7,9 @@ from __future__ import annotations
 
 from .types import Fill, Order, OrderSide, OrderType
 
-import math
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any
 
-class OrderSide(Enum):
-    BUY = "BUY"
-    SELL = "SELL"
 
 @dataclass
 class Broker:
@@ -25,6 +20,9 @@ class Broker:
         min_commission  = 0.0     (no A-share floor)
 
     Slippage is fixed at 0 (for now).
+
+    Orders are day orders: the backtester calls :meth:`cancel_unfilled`
+    after each session's matching pass, so nothing carries to a third day.
 
     Args:
         commission_rate: Fraction of notional (default 5 bps for US/ETF paper).
@@ -155,6 +153,17 @@ class Broker:
             self._pending_orders.remove(order)
 
         return fills
+
+    def cancel_unfilled(self) -> list[Order]:
+        """Cancel every order still pending (day-order semantics).
+
+        An order gets exactly one bar to fill; anything left in the queue
+        after matching is expired so a stale limit order cannot fill days
+        later at an outdated price.  Returns the cancelled orders.
+        """
+        cancelled = list(self._pending_orders)
+        self._pending_orders.clear()
+        return cancelled
 
     # ------------------------------------------------------------------
     #  Commission

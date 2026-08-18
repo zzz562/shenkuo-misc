@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import math
 from abc import ABC, abstractmethod
 from typing import Optional
 
 from whaletrail.engine.broker import Order, OrderSide, OrderType
+
+
+def position_key(symbol: str, strategy_name: str) -> str:
+    """Book-keeping key for live paper positions: one slot per
+    (symbol, strategy) so panel strategies never share a position."""
+    return f"{symbol}|{strategy_name}"
 
 
 class Strategy(ABC):
@@ -158,7 +165,11 @@ class Strategy(ABC):
         quantity: Optional[float],
         percent: Optional[float],
     ) -> Optional[float]:
-        """Compute absolute quantity from *quantity* or *percent*."""
+        """Compute absolute quantity from *quantity* or *percent*.
+
+        Quantities are floored to whole shares (ETF/stock lots); a request
+        that rounds down to zero is dropped.
+        """
         if percent is not None:
             if self.account is None:
                 return None
@@ -170,7 +181,9 @@ class Strategy(ABC):
                 return None
             quantity = (equity * percent) / price
 
-        if quantity is not None and quantity <= 0:
-            return None
+        if quantity is not None:
+            quantity = float(math.floor(quantity))
+            if quantity <= 0:
+                return None
 
         return quantity
