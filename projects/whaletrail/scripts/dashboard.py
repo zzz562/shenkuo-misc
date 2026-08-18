@@ -809,7 +809,7 @@ def page_backtest() -> None:
 def _live_panel() -> None:
     live = load_live_state()
     if not live:
-        st.info("还没有实时扫描数据。运行 scripts/paper-live.py tick（或 loop --interval 600）")
+        st.info("还没有实时扫描数据。运行 scripts/paper-live.py tick（或 loop --interval 1800）")
         return
 
     snap = live.get("last_snapshot") or {}

@@ -64,7 +64,8 @@ def get_live_signal(
     c = closes[-1]
     entry_high = max(highs[-entry_n - 1 : -1])
     exit_low = min(lows[-exit_n - 1 : -1])
-    pos = state.get("positions", {}).get(f"{symbol}_turtle")
+    from whaletrail.strategy.base import position_key
+    pos = state.get("positions", {}).get(position_key(symbol, "turtle"))
     holding = pos is not None
     if c > entry_high and not holding:
         return "BUY"

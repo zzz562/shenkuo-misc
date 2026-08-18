@@ -133,32 +133,38 @@ def get_live_signal(
     state: dict,
     symbol: str,
 ) -> Optional[str]:
-    """Paper-live signal: SMA20/50 + SMA200 trend filter + ATR trailing stop."""
+    """Paper-live signal: SMA20/50 + SMA200 trend filter + ATR trailing stop.
+
+    Position and trailing-stop state live under this strategy's own
+    ``position_key`` slot so sibling panel strategies cannot interfere.
+    """
     from whaletrail.indicators import atr, cross_signal, sma
+    from whaletrail.strategy.base import position_key
     if len(closes) < 51:
         return None
+    key = position_key(symbol, "gold_sma_v2")
     c = closes[-1]
     a = atr(highs, lows, closes, 14) or 0
     stops = state.setdefault("atr_stops", {})
-    pos = state.get("positions", {}).get(symbol)
+    pos = state.get("positions", {}).get(key)
     holding = pos is not None and pos.get("side") == "LONG"
-    stop = stops.get(symbol)
+    stop = stops.get(key)
     if holding and stop is not None and c < stop:
-        stops.pop(symbol, None)
+        stops.pop(key, None)
         return "SELL"
     base = cross_signal(closes, 20, 50)
-    sma200 = sma(closes, min(200, len(closes))) if len(closes) >= 50 else None
+    sma200 = sma(closes, 200) if len(closes) >= 200 else None
     if base == "BUY":
         if sma200 is not None and c < sma200:
             return None
         if a > 0:
-            stops[symbol] = c - 2.0 * a
+            stops[key] = c - 2.0 * a
         return "BUY"
     if base == "SELL":
-        stops.pop(symbol, None)
+        stops.pop(key, None)
         return "SELL"
     if holding and a > 0 and stop is not None:
         new_stop = c - 2.0 * a
         if new_stop > stop:
-            stops[symbol] = new_stop
+            stops[key] = new_stop
     return None

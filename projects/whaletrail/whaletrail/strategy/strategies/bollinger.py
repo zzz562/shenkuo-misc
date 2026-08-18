@@ -59,7 +59,8 @@ def get_live_signal(
     std = var ** 0.5
     upper, lower = mean + k * std, mean - k * std
     c, prev = closes[-1], closes[-2]
-    pos = state.get("positions", {}).get(f"{symbol}_bb")
+    from whaletrail.strategy.base import position_key
+    pos = state.get("positions", {}).get(position_key(symbol, "bollinger"))
     holding = pos is not None
     if prev <= upper and c > upper and not holding:
         return "BUY"

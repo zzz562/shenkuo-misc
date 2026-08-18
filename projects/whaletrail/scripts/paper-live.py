@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-"""WhaleTrail Paper Live — multi-strategy scan + Telegram.
+"""WhaleTrail Paper Live — multi-strategy daily-bar scan + Telegram.
 
-Gold-first: GLD runs a strategy panel; SPY is hedge context only.
-Scans are gated on NYSE regular hours (whaletrail/engine/session.py), so
-weekends/holidays/off-hours never produce signals or paper trades.
+Signals are computed on **completed daily bars** (1d), exactly like the
+backtested strategies, and paper fills are recorded at **today's open** —
+the same "signal at close N → fill at open N+1" assumption the backtester
+uses (`whaletrail/engine/backtester.py`).  A single scan shortly after the
+US open (09:30–16:00 ET session gate, `whaletrail/engine/session.py`)
+captures everything the daily strategies can produce for the day; running
+more often only re-confirms the same signals (dedup is per strategy/day).
 
 Usage:
   python scripts/paper-live.py tick
-  python scripts/paper-live.py loop --interval 600
+  python scripts/paper-live.py loop --interval 1800
 """
 from __future__ import annotations
 
@@ -59,11 +63,16 @@ PROXY = os.environ.get("WT_PROXY_URL") or os.environ.get("HTTPS_PROXY") or "http
 os.environ.setdefault("HTTPS_PROXY", PROXY)
 os.environ.setdefault("HTTP_PROXY", PROXY)
 
+# Daily-bar signal inputs: SMA200 warm-up + slow-window strategies need a
+# long history; 420 calendar days ≈ 285+ trading sessions.
+DAILY_LOOKBACK_DAYS = 420
+MIN_DAILY_BARS = 260
+# Reject the series when the last completed bar moves more than this vs the
+# prior close — on GLD/SPY that means a split or a corrupt feed, not a trade.
+MAX_DAY_MOVE = 0.25
 
 # ── Data ─────────────────────────────────────────────────────────
-def fetch_latest(
-    symbol: str, interval: str = "5m", lookback_days: int = 10
-) -> Any:
+def fetch_daily(symbol: str, lookback_days: int = DAILY_LOOKBACK_DAYS) -> Any:
     end = datetime.now()
     start = end - timedelta(days=lookback_days)
     try:
@@ -71,7 +80,7 @@ def fetch_latest(
             symbol,
             start=start.strftime("%Y-%m-%d"),
             end=end.strftime("%Y-%m-%d"),
-            interval=interval,
+            interval="1d",
             progress=False,
             auto_adjust=True,
         )
@@ -100,36 +109,72 @@ def series(df: Any, col: str) -> list[float]:
     return [float(x) for x in df[col].dropna().tolist()]
 
 
+def validate_daily(df: Any, symbol: str) -> Optional[str]:
+    """Data-quality gate.  Returns a rejection reason, or None when clean.
+
+    Signals are only as good as their input: refuse to trade (even paper)
+    on bars that fail basic sanity checks.
+    """
+    if len(df) < MIN_DAILY_BARS:
+        return f"only {len(df)} daily bars (< {MIN_DAILY_BARS})"
+    closes = df["close"]
+    if closes.isna().any():
+        return "NaN close in series"
+    if (closes <= 0).any():
+        return "non-positive close in series"
+    last, prev = float(closes.iloc[-1]), float(closes.iloc[-2])
+    move = abs(last / prev - 1.0)
+    if move > MAX_DAY_MOVE:
+        return (
+            f"last completed bar moved {move:.1%} vs prior close — "
+            "split or corrupt feed?"
+        )
+    return None
+
+
+def split_today(df: Any) -> tuple[Any, Optional[float]]:
+    """Split off today's (partial) bar.
+
+    Returns (completed_bars_df, today_open).  today_open is None when the
+    last bar is not today's — i.e. stale data / holiday.
+    """
+    last = df.index[-1]
+    last_date = last.date() if last.tzinfo is None else last.astimezone(US_TZ).date()
+    if last_date != datetime.now(US_TZ).date():
+        return df, None
+    return df.iloc[:-1], float(df["open"].iloc[-1])
+
+
 # ── Signal dispatch (single source: strategy registry) ──────────
 from whaletrail.engine.session import US_TZ, us_session  # noqa: E402
+from whaletrail.strategy.base import position_key  # noqa: E402
 from whaletrail.strategy.registry import _build_signal_registry  # noqa: E402
 
 SIGNAL_FNS = _build_signal_registry()
 
 
-def bar_is_fresh(df: Any) -> bool:
-    """True if the last bar belongs to today in the market timezone.
-
-    Guards against holidays and stale data: yfinance returns the previous
-    session's bars when the market is closed, and a signal computed on them
-    would be a paper trade on a non-trading day.
-    """
-    last = df.index[-1]
-    if last.tzinfo is None:
-        last_date = last.date()
-    else:
-        last_date = last.astimezone(US_TZ).date()
-    return last_date == datetime.now(US_TZ).date()
-
-
 # ── State / Telegram ─────────────────────────────────────────────
 def load_state() -> dict:
+    state: dict = {"positions": {}, "last_signals": {}, "last_snapshot": {}}
     if STATE_FILE.exists():
         try:
-            return json.loads(STATE_FILE.read_text())
+            state.update(json.loads(STATE_FILE.read_text()))
         except Exception:
             pass
-    return {"positions": {}, "last_signals": {}, "last_snapshot": {}}
+    # Migration (2026-08-18): position slots are per (symbol, strategy).
+    # Legacy keys ("GLD", "GLD_bb", "GLD_turtle") mixed strategies'
+    # bookkeeping and are dropped; atr_stops from that era go with them.
+    positions = state.get("positions", {})
+    legacy = [k for k in positions if "|" not in k]
+    if legacy:
+        print(f"  ⚠️ dropping legacy position keys: {sorted(legacy)}")
+        for k in legacy:
+            positions.pop(k, None)
+    stops = state.get("atr_stops", {})
+    if any("|" not in k for k in stops):
+        print("  ⚠️ dropping legacy atr_stops (rebuilt on next BUY)")
+        state["atr_stops"] = {k: v for k, v in stops.items() if "|" in k}
+    return state
 
 
 def save_state(state: dict) -> None:
@@ -158,12 +203,15 @@ def send_telegram(text: str) -> bool:
         return False
 
 
-def update_pos_after_signal(state: dict, key: str, signal: str, price: float) -> None:
+def update_pos_after_signal(
+    state: dict, key: str, signal: str, fill_price: float, signal_date: str
+) -> None:
     if signal == "BUY":
         state.setdefault("positions", {})[key] = {
             "side": "LONG",
-            "entry_price": price,
+            "entry_price": fill_price,
             "entry_date": date.today().isoformat(),
+            "signal_date": signal_date,
         }
     else:
         state.setdefault("positions", {}).pop(key, None)
@@ -177,36 +225,68 @@ def tick() -> Optional[str]:
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     day = date.today().isoformat()
     all_lines: list[str] = []
-    gold_votes: list[str] = []
     skip_reasons: list[str] = []
-    no_data = 0
 
+    # ── Pass 1: fetch + validate ─────────────────────────────────
+    prepared: dict[str, dict] = {}
     for job in SCAN_JOBS:
         symbol = job["symbol"]
-        label = job["label"]
-        market = job.get("market", "us")
-        if market == "us" and not us_session():
+        if job.get("market", "us") == "us" and not us_session():
             skip_reasons.append("session")
             continue
-        df = fetch_latest(symbol)
+        df = fetch_daily(symbol)
         if df is None:
-            no_data += 1
-            print(f"\n[{now}] {label} {symbol}")
-            print("  ⚠️ no data")
+            skip_reasons.append("no_data")
+            print(f"\n[{now}] {job['label']} {symbol}\n  ⚠️ no data")
             continue
-        if not bar_is_fresh(df):
+        hist, today_open = split_today(df)
+        if today_open is None:
             skip_reasons.append("stale")
             continue
-        print(f"\n[{now}] {label} {symbol}")
-
-        closes = series(df, "close")
-        highs = series(df, "high")
-        lows = series(df, "low")
-        if not closes:
-            print("  ⚠️ empty closes")
+        if today_open <= 0:
+            skip_reasons.append("invalid")
+            print(f"\n[{now}] {job['label']} {symbol}\n  ⚠️ data rejected: non-positive today's open")
             continue
-        price = closes[-1]
-        print(f"  price ${price:.2f}  bars={len(closes)}")
+        problem = validate_daily(hist, symbol)
+        if problem is not None:
+            skip_reasons.append("invalid")
+            print(f"\n[{now}] {job['label']} {symbol}\n  ⚠️ data rejected: {problem}")
+            continue
+        prepared[symbol] = {"hist": hist, "open": today_open, "job": job}
+
+    # Cross-instrument corruption guard: two different symbols must never
+    # print the exact same open and close (observed in a broken feed).
+    fps: dict[tuple[float, float], str] = {}
+    for symbol, pack in prepared.items():
+        fp = (round(pack["open"], 4), round(float(pack["hist"]["close"].iloc[-1]), 4))
+        other = fps.get(fp)
+        if other is not None:
+            print(
+                f"  ⚠️ {symbol} and {other} report identical open/close "
+                f"{fp} — feed corrupt, skipping both"
+            )
+            prepared.pop(symbol, None)
+            prepared.pop(other, None)
+        else:
+            fps[fp] = symbol
+
+    # ── Pass 2: signals on completed bars, fills at today's open ──
+    for symbol, pack in prepared.items():
+        job, hist, exec_open = pack["job"], pack["hist"], pack["open"]
+        label = job["label"]
+        signal_date = str(hist.index[-1].date() if hasattr(hist.index[-1], "date") else hist.index[-1])
+
+        closes = series(hist, "close")
+        highs = series(hist, "high")
+        lows = series(hist, "low")
+        if not closes:
+            print(f"  ⚠️ empty closes for {symbol}")
+            continue
+        last_close = closes[-1]
+        print(
+            f"\n[{now}] {label} {symbol}  open ${exec_open:.2f}  "
+            f"prev close ${last_close:.2f}  bars={len(closes)}"
+        )
 
         votes: dict[str, str] = {}
         for name in job["strategies"]:
@@ -232,18 +312,14 @@ def tick() -> Optional[str]:
             emoji = "🟢" if sig == "BUY" else "🔴"
             msg = (
                 f"{emoji} *{label} {symbol}* `{name}` → *{sig}*\n"
-                f"价格 ${price:.2f}\n"
-                f"{now} · WhaleTrail Live"
+                f"信号日 {signal_date} 收盘确认 · 按今日开盘价 ${exec_open:.2f} 记账\n"
+                f"{now} · WhaleTrail Live (daily)"
             )
             if send_telegram(msg):
                 state.setdefault("last_signals", {})[last_key] = day
-                # position keys for strategies that track holding
-                pos_key = symbol if name in ("gold_sma", "gold_sma_v2", "ma_cross", "momentum") else f"{symbol}_{name[:2]}"
-                if name == "bollinger":
-                    pos_key = f"{symbol}_bb"
-                elif name == "turtle":
-                    pos_key = f"{symbol}_turtle"
-                update_pos_after_signal(state, pos_key, sig, price)
+                update_pos_after_signal(
+                    state, position_key(symbol, name), sig, exec_open, signal_date
+                )
 
         if job["role"] == "primary" and votes:
             buys = sum(1 for v in votes.values() if v == "BUY")
@@ -257,20 +333,24 @@ def tick() -> Optional[str]:
             if consensus != "MIXED" and state.get("last_signals", {}).get(snap_key) != day:
                 body = (
                     f"📡 *GLD 策略面板共识 → {consensus}*\n"
-                    f"价格 ${price:.2f} | 票数 BUY {buys}/{n} SELL {sells}/{n}\n"
+                    f"今日开盘 ${exec_open:.2f} | 票数 BUY {buys}/{n} SELL {sells}/{n}\n"
                     f"{', '.join(gold_votes)}\n"
                     f"{now}"
                 )
                 if send_telegram(body):
                     state.setdefault("last_signals", {})[snap_key] = day
             all_lines.append(
-                f"{symbol} ${price:.2f} consensus={consensus} {gold_votes}"
+                f"{symbol} open ${exec_open:.2f} consensus={consensus} {gold_votes}"
             )
         elif votes:
-            all_lines.append(f"{symbol} ${price:.2f} {votes}")
+            all_lines.append(f"{symbol} open ${exec_open:.2f} {votes}")
 
         state.setdefault("last_snapshot", {})[symbol] = {
-            "price": price,
+            # "price" kept for the dashboard's price cards; equals today's open.
+            "price": exec_open,
+            "open": exec_open,
+            "prev_close": last_close,
+            "signal_date": signal_date,
             "votes": votes,
             "ts": now,
         }
@@ -282,28 +362,29 @@ def tick() -> Optional[str]:
             print(line)
 
     n_jobs = len(SCAN_JOBS)
-    if len(skip_reasons) == n_jobs:
+    if prepared:
+        return None
+    if len(skip_reasons) >= n_jobs:
         if skip_reasons and all(r == "stale" for r in skip_reasons):
             return "⏸ 无今日 K 线（节假日或数据未更新），跳过本次扫描"
         markets = sorted({job.get("market", "us") for job in SCAN_JOBS})
         return f"⏸ 非交易时段（{'/'.join(markets)}），跳过本次扫描"
-    if no_data == n_jobs:
-        return "⏸ 数据拉取失败，跳过本次扫描"
-    return None
+    return "⏸ 无有效数据（拉取失败或质检拦截），跳过本次扫描"
 
 
 _last_skip_note: Optional[str] = None
 
 
-def loop(interval: int = 600) -> None:
+def loop(interval: int = 1800) -> None:
     global _last_skip_note
     n_strat = sum(len(j["strategies"]) for j in SCAN_JOBS)
     print(
-        f"🔄 Paper Live multi-strategy | interval={interval}s | "
+        f"🔄 Paper Live daily signals | interval={interval}s | "
         f"jobs={len(SCAN_JOBS)} strategies={n_strat}"
     )
     print(f"   Telegram: {'✅' if TG_TOKEN else '❌ set TG_BOT_TOKEN'}")
     print("   Sessions: 美股 Mon–Fri 09:30–16:00 ET（周末/节假日自动跳过）")
+    print("   Signals: 已收盘日线 · 按当日开盘价记账（与回测假设一致）")
     while True:
         try:
             note = tick()
@@ -326,7 +407,7 @@ if __name__ == "__main__":
     sp = p.add_subparsers(dest="cmd")
     sp.add_parser("tick")
     lp = sp.add_parser("loop")
-    lp.add_argument("--interval", type=int, default=600)
+    lp.add_argument("--interval", type=int, default=1800)
     args = p.parse_args()
     if args.cmd == "loop":
         loop(args.interval)
